@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BellOff, Lock, Users, Clock, Check, X } from "lucide-react";
+import { Bell, BellOff, Lock, Users, Clock, Check, X, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrg } from "@/contexts/OrgContext";
@@ -29,6 +29,7 @@ function Hovedside() {
   const [boern, setBoern] = useState<Barn[]>([]);
   const [fremmoede, setFremmoede] = useState<Record<string, Fremmoede>>({});
   const [valgtKategori, setValgtKategori] = useState<string>("alle");
+  const [soegning, setSoegning] = useState("");
   const [dagLukket, setDagLukket] = useState(false);
   const [notiTilladt, setNotiTilladt] = useState<NotificationPermission>("default");
   const [redigerBarn, setRedigerBarn] = useState<Barn | null>(null);
@@ -100,10 +101,13 @@ function Hovedside() {
   }, [boern, fremmoede, aktivOrgId]);
 
   const filtrede = useMemo(() => {
-    if (valgtKategori === "alle") return boern;
-    if (valgtKategori === "ingen") return boern.filter((b) => !b.category_id);
-    return boern.filter((b) => b.category_id === valgtKategori);
-  }, [boern, valgtKategori]);
+    let res = boern;
+    if (valgtKategori === "ingen") res = res.filter((b) => !b.category_id);
+    else if (valgtKategori !== "alle") res = res.filter((b) => b.category_id === valgtKategori);
+    const q = soegning.trim().toLowerCase();
+    if (q) res = res.filter((b) => b.full_name.toLowerCase().includes(q));
+    return res;
+  }, [boern, valgtKategori, soegning]);
 
   const tilstedeAntal = useMemo(
     () => Object.values(fremmoede).filter((f) => f.status === "present").length,
@@ -211,6 +215,16 @@ function Hovedside() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={soegning}
+            onChange={(e) => setSoegning(e.target.value)}
+            placeholder="Søg efter barn…"
+            className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
+          />
+        </div>
         <select value={valgtKategori} onChange={(e) => setValgtKategori(e.target.value)}
           className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium">
           <option value="alle">Alle kategorier ({boern.length})</option>
