@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
