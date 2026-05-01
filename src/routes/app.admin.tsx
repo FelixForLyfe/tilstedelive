@@ -290,19 +290,40 @@ function PersonalePanel({ orgId }: { orgId: string }) {
   const indlaes = useCallback(async () => {
     const [m, i, v] = await Promise.all([
       supabase.from("organization_members")
-        .select("id, role, status, user_id, profiles:user_id(email, full_name)")
+        .select("id, role, status, user_id")
         .eq("organization_id", orgId),
       supabase.from("organization_invites")
         .select("*").eq("organization_id", orgId).order("created_at", { ascending: false }),
       supabase.from("employee_time_logs")
-        .select("*, profiles:user_id(full_name, email)")
+        .select("*")
         .eq("organization_id", orgId).eq("date", dato),
     ]);
-    setList(m.data ?? []);
+    const medlemmer = m.data ?? [];
+    // Hent profiler separat (ingen FK i schemaet) — slå op via id IN (...)
+    const userIds = Array.from(new Set([
+      ...medlemmer.map((x: any) => x.user_id),
+      ...(v.data ?? []).map((x: any) => x.user_id),
+    ])).filter(Boolean);
+    let profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase.from("profiles")
+        .select("id, full_name, email").in("id", userIds);
+      for (const p of profs ?? []) profileMap[p.id] = { full_name: p.full_name, email: p.email };
+    }
+    setList(medlemmer.map((x: any) => ({ ...x, profiles: profileMap[x.user_id] ?? null })));
     setInvites(i.data ?? []);
-    setVagter(v.data ?? []);
+    setVagter((v.data ?? []).map((x: any) => ({ ...x, profiles: profileMap[x.user_id] ?? null })));
   }, [orgId, dato]);
   useEffect(() => { indlaes(); }, [indlaes]);
+
+  // Realtime: opdater når nye medlemmer/invites tilføjes
+  useEffect(() => {
+    const ch = supabase.channel(`admin-personale-${orgId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "organization_members", filter: `organization_id=eq.${orgId}` }, () => indlaes())
+      .on("postgres_changes", { event: "*", schema: "public", table: "organization_invites", filter: `organization_id=eq.${orgId}` }, () => indlaes())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, indlaes]);
 
   const fjern = async (id: string) => {
     if (!confirm("Fjern denne person fra organisationen?")) return;
