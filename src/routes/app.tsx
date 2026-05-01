@@ -20,12 +20,7 @@ function AppLayout() {
   const navigate = useNavigate();
   const path = useRouterState({ select: (r) => r.location.pathname });
 
-  useEffect(() => {
-    if (loading) return;
-    if (erAdmin && path === "/app") {
-      navigate({ to: "/app/admin" });
-    }
-  }, [loading, erAdmin, path, navigate]);
+  // Begge roller (admin + personale) lander på status-siden, hvor man tjekker børn ind/ud.
 
   const handleLogout = async () => {
     await logUd();
