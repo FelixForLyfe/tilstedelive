@@ -21,10 +21,11 @@ function AppLayout() {
   const path = useRouterState({ select: (r) => r.location.pathname });
 
   useEffect(() => {
-    if (!loading && medlemskaber.length === 0) {
-      // ingen aktiv organisation – bliv på siden men vis besked
+    if (loading) return;
+    if (erAdmin && path === "/app") {
+      navigate({ to: "/app/admin" });
     }
-  }, [loading, medlemskaber.length]);
+  }, [loading, erAdmin, path, navigate]);
 
   const handleLogout = async () => {
     await logUd();

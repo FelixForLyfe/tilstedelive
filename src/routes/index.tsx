@@ -33,8 +33,9 @@ function Forside() {
           </div>
           <span className="font-display text-xl font-bold tracking-tight">Tilstede</span>
         </div>
-        <div className="flex gap-2">
-          <Link to="/login" className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Log ind</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/login/personale" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Personale</Link>
+          <Link to="/login/admin" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Admin</Link>
           <Link to="/signup" className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90">Opret organisation</Link>
         </div>
       </header>
@@ -52,10 +53,10 @@ function Forside() {
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <Link to="/signup" className="rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
-            Kom i gang gratis
+            Opret organisation
           </Link>
-          <Link to="/login" className="rounded-xl border border-border bg-surface px-6 py-3 font-semibold transition hover:bg-surface-elevated">
-            Jeg har en konto
+          <Link to="/login/personale" className="rounded-xl border border-border bg-surface px-6 py-3 font-semibold transition hover:bg-surface-elevated">
+            Personale-login
           </Link>
         </div>
       </section>
