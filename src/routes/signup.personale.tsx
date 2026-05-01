@@ -11,7 +11,7 @@ export const Route = createFileRoute("/signup/personale")({
 function PersonaleSignup() {
   const navigate = useNavigate();
   const [navn, setNavn] = useState("");
-  const [orgNavn, setOrgNavn] = useState("");
+  const [kode, setKode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,9 +20,31 @@ function PersonaleSignup() {
     e.preventDefault();
     setLoading(true);
 
+    const renKode = kode.trim().toUpperCase();
+    if (!renKode) {
+      setLoading(false);
+      toast.error("Indtast invitations-kode fra din admin");
+      return;
+    }
+
+    // 1) Verificér at koden findes og er gyldig
+    const { data: invite, error: lookupErr } = await supabase
+      .from("organization_invites")
+      .select("id, organization_id, expires_at, used_at")
+      .eq("code", renKode)
+      .is("used_at", null)
+      .maybeSingle();
+    if (lookupErr || !invite) {
+      setLoading(false);
+      toast.error("Ugyldig invitations-kode", { description: "Bed admin om en ny kode." });
+      return;
+    }
+
+    // 2) Opret konto
     const redirectUrl = `${window.location.origin}/login/personale`;
     const { data, error } = await supabase.auth.signUp({
-      email, password,
+      email,
+      password,
       options: { emailRedirectTo: redirectUrl, data: { full_name: navn || email } },
     });
     if (error || !data.user) {
@@ -31,11 +53,28 @@ function PersonaleSignup() {
       return;
     }
 
-    setLoading(false);
-    toast.success("Konto oprettet", {
-      description: `Bed admin på "${orgNavn}" om at tilføje dig. Derefter kan du logge ind.`,
-    });
-    navigate({ to: "/login/personale" });
+    // 3) Vent på session, indløs kode
+    let aktivSession = null;
+    for (let i = 0; i < 20; i++) {
+      const { data: s } = await supabase.auth.getSession();
+      if (s.session?.access_token) { aktivSession = s.session; break; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    if (aktivSession) {
+      const { error: redeemErr } = await supabase.rpc("redeem_invite", { _code: renKode });
+      if (redeemErr) {
+        setLoading(false);
+        toast.error("Kunne ikke indløse kode", { description: redeemErr.message });
+        return;
+      }
+      toast.success("Konto oprettet og tilføjet til organisationen");
+      navigate({ to: "/app" });
+    } else {
+      setLoading(false);
+      toast.success("Konto oprettet", { description: "Log ind for at indløse din kode." });
+      navigate({ to: "/login/personale" });
+    }
   };
 
   return (
@@ -53,7 +92,7 @@ function PersonaleSignup() {
             <Users className="h-3.5 w-3.5" /> Personale
           </div>
           <h1 className="font-display text-2xl font-bold">Opret personale-konto</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Når kontoen er oprettet, skal en admin tilføje dig til organisationen.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Brug invitations-koden fra din admin.</p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div>
@@ -62,10 +101,11 @@ function PersonaleSignup() {
                 className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
             </div>
             <div>
-              <label className="text-sm font-medium">Organisationens navn</label>
-              <input required value={orgNavn} onChange={(e) => setOrgNavn(e.target.value)}
-                placeholder="Fx Solsikkens SFO"
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <label className="text-sm font-medium">Invitations-kode</label>
+              <input required value={kode} onChange={(e) => setKode(e.target.value.toUpperCase())}
+                placeholder="Fx ABC123XY"
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm font-mono uppercase tracking-widest focus:border-ring focus:outline-none" />
+              <p className="mt-1 text-xs text-muted-foreground">Få koden fra admin under Admin → Personale.</p>
             </div>
             <div>
               <label className="text-sm font-medium">E-mail</label>
