@@ -3,6 +3,7 @@ import appCss from "../styles.css?url";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OrgProvider } from "@/contexts/OrgContext";
 import { Toaster } from "@/components/ui/sonner";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 function NotFoundComponent() {
   return (
@@ -36,8 +37,17 @@ export const Route = createRootRoute({
       { property: "og:title", content: "Tilstede" },
       { property: "og:description", content: "Live fremmøde, hjemsendelser og logning for danske institutioner." },
       { property: "og:type", content: "website" },
+      { name: "theme-color", content: "#16182a" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Tilstede" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "icon", href: "/app-icon-192.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/app-icon-192.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -62,6 +72,7 @@ function RootComponent() {
       <OrgProvider>
         <Outlet />
         <Toaster richColors position="top-center" />
+        <InstallPrompt />
       </OrgProvider>
     </AuthProvider>
   );
