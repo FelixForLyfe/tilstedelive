@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Sparkles, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/signup/personale")({
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/signup/personale")({
 
 function PersonaleSignup() {
   const navigate = useNavigate();
+  const { genindlaes } = useOrg();
   const [navn, setNavn] = useState("");
   const [kode, setKode] = useState("");
   const [email, setEmail] = useState("");
