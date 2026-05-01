@@ -101,10 +101,13 @@ function Hovedside() {
   }, [boern, fremmoede, aktivOrgId]);
 
   const filtrede = useMemo(() => {
-    if (valgtKategori === "alle") return boern;
-    if (valgtKategori === "ingen") return boern.filter((b) => !b.category_id);
-    return boern.filter((b) => b.category_id === valgtKategori);
-  }, [boern, valgtKategori]);
+    let res = boern;
+    if (valgtKategori === "ingen") res = res.filter((b) => !b.category_id);
+    else if (valgtKategori !== "alle") res = res.filter((b) => b.category_id === valgtKategori);
+    const q = soegning.trim().toLowerCase();
+    if (q) res = res.filter((b) => b.full_name.toLowerCase().includes(q));
+    return res;
+  }, [boern, valgtKategori, soegning]);
 
   const tilstedeAntal = useMemo(
     () => Object.values(fremmoede).filter((f) => f.status === "present").length,
