@@ -1,32 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-import { Sparkles } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Sparkles, ShieldCheck, Users } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  component: LoginSide,
+  component: LoginVaelg,
 });
 
-function LoginSide() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      toast.error("Kunne ikke logge ind", { description: error.message });
-      return;
-    }
-    toast.success("Velkommen tilbage");
-    navigate({ to: "/app" });
-  };
-
+function LoginVaelg() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-md fade-in">
@@ -39,27 +18,33 @@ function LoginSide() {
 
         <div className="glass rounded-3xl p-8 shadow-card">
           <h1 className="font-display text-2xl font-bold">Log ind</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Velkommen tilbage. Indtast din e-mail og adgangskode.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Vælg hvilken type konto du vil logge ind med.</p>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4">
-            <div>
-              <label className="text-sm font-medium">E-mail</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Adgangskode</label>
-              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">
-              {loading ? "Logger ind…" : "Log ind"}
-            </button>
-          </form>
+          <div className="mt-6 grid gap-3">
+            <Link to="/login/admin"
+              className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition hover:bg-surface-elevated hover:shadow-glow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-soft">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold">Admin / Organisation</div>
+                <div className="text-xs text-muted-foreground">Adgang til admin-dashboard og styring</div>
+              </div>
+            </Link>
+            <Link to="/login/personale"
+              className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition hover:bg-surface-elevated hover:shadow-glow">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/15 text-accent">
+                <Users className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold">Personale</div>
+                <div className="text-xs text-muted-foreground">Log ind med organisationens navn og din konto</div>
+              </div>
+            </Link>
+          </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Har du ikke en konto?{" "}
+            Ingen konto?{" "}
             <Link to="/signup" className="font-semibold text-primary hover:underline">Opret organisation</Link>
           </p>
         </div>
