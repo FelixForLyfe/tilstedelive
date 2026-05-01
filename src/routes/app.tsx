@@ -28,7 +28,7 @@ function AppLayout() {
   };
 
   const navItems = [
-    { to: "/app", label: "Forside", icon: Home, exact: true },
+    { to: "/app", label: "Status", icon: Home, exact: true },
     { to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity },
     { to: "/app/logning", label: "Logning", icon: Clock },
     ...(erAdmin ? [
