@@ -27,20 +27,7 @@ function PersonaleSignup() {
       return;
     }
 
-    // 1) Verificér at koden findes og er gyldig
-    const { data: invite, error: lookupErr } = await supabase
-      .from("organization_invites")
-      .select("id, organization_id, expires_at, used_at")
-      .eq("code", renKode)
-      .is("used_at", null)
-      .maybeSingle();
-    if (lookupErr || !invite) {
-      setLoading(false);
-      toast.error("Ugyldig invitations-kode", { description: "Bed admin om en ny kode." });
-      return;
-    }
-
-    // 2) Opret konto
+    // 1) Opret konto (validering af koden sker i redeem_invite efter login)
     const redirectUrl = `${window.location.origin}/login/personale`;
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -53,28 +40,37 @@ function PersonaleSignup() {
       return;
     }
 
-    // 3) Vent på session, indløs kode
+    // 2) Vent på session
     let aktivSession = null;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 30; i++) {
       const { data: s } = await supabase.auth.getSession();
       if (s.session?.access_token) { aktivSession = s.session; break; }
       await new Promise((r) => setTimeout(r, 100));
     }
 
-    if (aktivSession) {
-      const { error: redeemErr } = await supabase.rpc("redeem_invite", { _code: renKode });
-      if (redeemErr) {
-        setLoading(false);
-        toast.error("Kunne ikke indløse kode", { description: redeemErr.message });
-        return;
-      }
-      toast.success("Konto oprettet og tilføjet til organisationen");
-      navigate({ to: "/app" });
-    } else {
+    if (!aktivSession) {
+      // Konto blev lavet, men auto-confirm er måske slået fra — bed brugeren logge ind
       setLoading(false);
       toast.success("Konto oprettet", { description: "Log ind for at indløse din kode." });
       navigate({ to: "/login/personale" });
+      return;
     }
+
+    // 3) Indløs kode (server-funktionen tjekker selv gyldighed)
+    const { error: redeemErr } = await supabase.rpc("redeem_invite", { _code: renKode });
+    setLoading(false);
+    if (redeemErr) {
+      toast.error("Kunne ikke indløse kode", {
+        description: redeemErr.message.includes("Ugyldig")
+          ? "Koden er ugyldig eller udløbet. Bed admin om en ny."
+          : redeemErr.message,
+      });
+      // Brugeren har en konto men ingen organisation — send til app som vil vise "ingen organisation"
+      navigate({ to: "/app" });
+      return;
+    }
+    toast.success("Velkommen", { description: "Du er nu tilføjet til organisationen." });
+    navigate({ to: "/app" });
   };
 
   return (
