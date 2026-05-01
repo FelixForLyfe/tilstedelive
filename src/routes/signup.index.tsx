@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, type FormEvent } from "react";
 import { Sparkles, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createOrganizationAdmin } from "@/server/organization.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/signup/")({
@@ -10,6 +12,7 @@ export const Route = createFileRoute("/signup/")({
 
 function SignupSide() {
   const navigate = useNavigate();
+  const opretOrganisation = useServerFn(createOrganizationAdmin);
   const [navn, setNavn] = useState("");
   const [orgNavn, setOrgNavn] = useState("");
   const [email, setEmail] = useState("");
@@ -24,73 +27,21 @@ function SignupSide() {
     }
     setLoading(true);
 
-    const redirectUrl = `${window.location.origin}/login/admin`;
-    const { data, error } = await supabase.auth.signUp({
-      email, password,
-      options: { emailRedirectTo: redirectUrl, data: { full_name: navn || email } },
-    });
-    if (error) {
-      setLoading(false);
-      toast.error("Kunne ikke oprette konto", { description: error.message });
-      return;
-    }
+    try {
+      const org = await opretOrganisation({
+        data: { fullName: navn || email, orgName: orgNavn.trim(), email, password },
+      });
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInErr) throw signInErr;
 
-    // Sørg for at sessionen er aktiv FØR vi skriver til DB (RLS bruger auth.uid())
-    let userId = data.user?.id;
-    if (!data.session) {
-      // Auto-confirm er slået til, så vi kan logge ind direkte
-      const { data: signIn, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInErr || !signIn.user) {
-        setLoading(false);
-        toast.error("Konto oprettet, men kunne ikke logge ind", { description: signInErr?.message });
-        navigate({ to: "/login/admin" });
-        return;
-      }
-      userId = signIn.user.id;
-    }
-
-    if (!userId) {
+      localStorage.setItem("tilstede.aktivOrgId", org.organizationId);
+      navigate({ to: "/app/admin" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Prøv igen om lidt.";
+      toast.error("Kunne ikke oprette organisation", { description: message });
+    } finally {
       setLoading(false);
-      toast.error("Noget gik galt – prøv at logge ind");
-      return;
     }
-
-    // Vent til Supabase-klienten har en aktiv session (auth-header sættes async)
-    let aktivSession = null;
-    for (let i = 0; i < 20; i++) {
-      const { data: s } = await supabase.auth.getSession();
-      if (s.session?.access_token) { aktivSession = s.session; break; }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    if (!aktivSession) {
-      setLoading(false);
-      toast.error("Kunne ikke etablere session – prøv at logge ind");
-      navigate({ to: "/login/admin" });
-      return;
-    }
-
-    // Tjek om navnet allerede findes blandt brugerens orgs (sjælden race ved retry)
-    const { data: org, error: orgErr } = await supabase
-      .from("organizations")
-      .insert({ name: orgNavn.trim(), created_by: userId })
-      .select("id, name").single();
-    if (orgErr || !org) {
-      setLoading(false);
-      toast.error("Kunne ikke oprette organisationen", { description: orgErr?.message });
-      return;
-    }
-    const { error: memErr } = await supabase
-      .from("organization_members")
-      .insert({ organization_id: org.id, user_id: userId, role: "admin", status: "active" });
-    if (memErr) {
-      setLoading(false);
-      toast.error("Kunne ikke koble dig til organisationen", { description: memErr.message });
-      return;
-    }
-    localStorage.setItem("tilstede.aktivOrgId", org.id);
-    setLoading(false);
-    toast.success(`Velkommen! "${org.name}" er klar.`);
-    navigate({ to: "/app/admin" });
   };
 
   return (
