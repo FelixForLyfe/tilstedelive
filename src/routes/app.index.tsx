@@ -29,6 +29,7 @@ function Hovedside() {
   const [boern, setBoern] = useState<Barn[]>([]);
   const [fremmoede, setFremmoede] = useState<Record<string, Fremmoede>>({});
   const [valgtKategori, setValgtKategori] = useState<string>("alle");
+  const [soegning, setSoegning] = useState("");
   const [dagLukket, setDagLukket] = useState(false);
   const [notiTilladt, setNotiTilladt] = useState<NotificationPermission>("default");
   const [redigerBarn, setRedigerBarn] = useState<Barn | null>(null);
