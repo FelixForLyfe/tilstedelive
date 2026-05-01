@@ -171,7 +171,7 @@ function Hovedside() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wider text-muted-foreground">{formaterDansk(new Date())}</p>
-          <h1 className="font-display text-3xl font-bold">Fremmøde i dag</h1>
+          <h1 className="font-display text-3xl font-bold">Status</h1>
         </div>
         <div className="flex items-center gap-2">
           {notiTilladt !== "granted" && (
