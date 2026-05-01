@@ -1,0 +1,320 @@
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "@/contexts/OrgContext";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/app/admin")({
+  component: AdminSide,
+});
+
+type Tab = "boern" | "kategorier" | "aktiviteter" | "personale";
+
+function AdminSide() {
+  const { aktivOrgId, erAdmin } = useOrg();
+  const [tab, setTab] = useState<Tab>("boern");
+
+  if (!erAdmin) {
+    return <div className="glass rounded-2xl p-10 text-center text-muted-foreground">Kun admin har adgang.</div>;
+  }
+
+  const tabs: { id: Tab; label: string; icon: any }[] = [
+    { id: "boern", label: "Børn", icon: Users },
+    { id: "kategorier", label: "Kategorier", icon: Tag },
+    { id: "aktiviteter", label: "Aktiviteter", icon: ActIcon },
+    { id: "personale", label: "Personale", icon: UserCog },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <h1 className="font-display text-3xl font-bold">Admin</h1>
+      <div className="glass flex flex-wrap gap-1 rounded-2xl p-1.5">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
+                tab === t.id ? "bg-gradient-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:text-foreground"
+              }`}>
+              <Icon className="h-4 w-4" /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+      {aktivOrgId && tab === "boern" && <BoernPanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "kategorier" && <KategoriPanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "aktiviteter" && <AktivitetPanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "personale" && <PersonalePanel orgId={aktivOrgId} />}
+    </div>
+  );
+}
+
+// ===== KATEGORIER =====
+function KategoriPanel({ orgId }: { orgId: string }) {
+  const [list, setList] = useState<any[]>([]);
+  const [navn, setNavn] = useState("");
+
+  const indlaes = useCallback(async () => {
+    const { data } = await supabase.from("categories").select("*").eq("organization_id", orgId).order("sort_order");
+    setList(data ?? []);
+  }, [orgId]);
+  useEffect(() => { indlaes(); }, [indlaes]);
+
+  const opret = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!navn.trim()) return;
+    const { error } = await supabase.from("categories").insert({ organization_id: orgId, name: navn.trim(), sort_order: list.length });
+    if (error) return toast.error(error.message);
+    setNavn(""); indlaes();
+  };
+  const slet = async (id: string) => {
+    if (!confirm("Slet kategori?")) return;
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={opret} className="glass flex gap-2 rounded-2xl p-4">
+        <input value={navn} onChange={(e) => setNavn(e.target.value)} placeholder="Fx 1. klasse"
+          className="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+        <button className="inline-flex items-center gap-1 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          <Plus className="h-4 w-4" /> Tilføj
+        </button>
+      </form>
+      <div className="grid gap-2">
+        {list.map((k) => (
+          <div key={k.id} className="glass flex items-center justify-between rounded-xl p-3">
+            <span>{k.name}</span>
+            <button onClick={() => slet(k.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen kategorier endnu.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===== AKTIVITETER =====
+function AktivitetPanel({ orgId }: { orgId: string }) {
+  const [list, setList] = useState<any[]>([]);
+  const [navn, setNavn] = useState("");
+
+  const indlaes = useCallback(async () => {
+    const { data } = await supabase.from("activities").select("*").eq("organization_id", orgId).order("name");
+    setList(data ?? []);
+  }, [orgId]);
+  useEffect(() => { indlaes(); }, [indlaes]);
+
+  const opret = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!navn.trim()) return;
+    const { error } = await supabase.from("activities").insert({ organization_id: orgId, name: navn.trim() });
+    if (error) return toast.error(error.message);
+    setNavn(""); indlaes();
+  };
+  const slet = async (id: string) => {
+    if (!confirm("Slet aktivitet?")) return;
+    const { error } = await supabase.from("activities").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+  const toggle = async (a: any) => {
+    await supabase.from("activities").update({ is_active: !a.is_active }).eq("id", a.id);
+    indlaes();
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={opret} className="glass flex gap-2 rounded-2xl p-4">
+        <input value={navn} onChange={(e) => setNavn(e.target.value)} placeholder="Fx Playstation"
+          className="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+        <button className="inline-flex items-center gap-1 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          <Plus className="h-4 w-4" /> Tilføj
+        </button>
+      </form>
+      <div className="grid gap-2">
+        {list.map((a) => (
+          <div key={a.id} className="glass flex items-center justify-between rounded-xl p-3">
+            <span>{a.name}</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => toggle(a)}
+                className={`rounded-lg px-3 py-1 text-xs font-medium ${a.is_active ? "bg-success/15 text-success" : "bg-surface text-muted-foreground"}`}>
+                {a.is_active ? "Aktiv" : "Inaktiv"}
+              </button>
+              <button onClick={() => slet(a.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen aktiviteter endnu.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===== BØRN =====
+function BoernPanel({ orgId }: { orgId: string }) {
+  const [list, setList] = useState<any[]>([]);
+  const [kategorier, setKategorier] = useState<any[]>([]);
+  const [aaben, setAaben] = useState(false);
+  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+
+  const indlaes = useCallback(async () => {
+    const [b, k] = await Promise.all([
+      supabase.from("children").select("*, categories(name)").eq("organization_id", orgId).order("full_name"),
+      supabase.from("categories").select("*").eq("organization_id", orgId).order("sort_order"),
+    ]);
+    setList(b.data ?? []); setKategorier(k.data ?? []);
+  }, [orgId]);
+  useEffect(() => { indlaes(); }, [indlaes]);
+
+  const reset = () => setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+
+  const opret = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!form.full_name.trim()) return toast.error("Navn er påkrævet");
+    const payload: any = { ...form, organization_id: orgId };
+    if (!payload.category_id) payload.category_id = null;
+    if (!payload.default_leave_time) payload.default_leave_time = null;
+    const { error } = await supabase.from("children").insert(payload);
+    if (error) return toast.error(error.message);
+    toast.success("Barn tilføjet"); reset(); setAaben(false); indlaes();
+  };
+  const slet = async (id: string) => {
+    if (!confirm("Slet barn? Alle tilknyttede data slettes.")) return;
+    const { error } = await supabase.from("children").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+
+  return (
+    <div className="space-y-4">
+      <button onClick={() => setAaben(!aaben)}
+        className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow">
+        <Plus className="h-4 w-4" /> {aaben ? "Luk formular" : "Tilføj barn"}
+      </button>
+
+      {aaben && (
+        <form onSubmit={opret} className="glass grid gap-3 rounded-2xl p-5 md:grid-cols-2">
+          <Felt label="Fulde navn *" v={form.full_name} on={(v) => setForm({ ...form, full_name: v })} />
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Kategori</label>
+            <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
+              <option value="">– vælg –</option>
+              {kategorier.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+            </select>
+          </div>
+          <Felt label="Forælder 1" v={form.parent_1_name} on={(v) => setForm({ ...form, parent_1_name: v })} />
+          <Felt label="Telefon" v={form.parent_1_phone} on={(v) => setForm({ ...form, parent_1_phone: v })} />
+          <Felt label="Forælder 2" v={form.parent_2_name} on={(v) => setForm({ ...form, parent_2_name: v })} />
+          <Felt label="Telefon" v={form.parent_2_phone} on={(v) => setForm({ ...form, parent_2_phone: v })} />
+          <Felt label="Adresse" v={form.address} on={(v) => setForm({ ...form, address: v })} />
+          <Felt label="CPR-nummer" v={form.cpr_number} on={(v) => setForm({ ...form, cpr_number: v })} />
+          <Felt label="Læge" v={form.doctor_name} on={(v) => setForm({ ...form, doctor_name: v })} />
+          <Felt label="Lægens telefon" v={form.doctor_phone} on={(v) => setForm({ ...form, doctor_phone: v })} />
+          <Felt label="Allergier" v={form.allergies} on={(v) => setForm({ ...form, allergies: v })} />
+          <Felt label="Særlige hensyn" v={form.special_notes} on={(v) => setForm({ ...form, special_notes: v })} />
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Standard hjemsendelse</label>
+            <input type="time" value={form.default_leave_time} onChange={(e) => setForm({ ...form, default_leave_time: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.can_leave_alone} onChange={(e) => setForm({ ...form, can_leave_alone: e.target.checked })} />
+            Må gå hjem alene
+          </label>
+          <div className="md:col-span-2">
+            <button className="rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Gem barn</button>
+          </div>
+        </form>
+      )}
+
+      <div className="grid gap-2">
+        {list.map((b) => (
+          <div key={b.id} className="glass flex items-center justify-between rounded-xl p-3">
+            <div>
+              <p className="font-semibold">{b.full_name}</p>
+              <p className="text-xs text-muted-foreground">{b.categories?.name ?? "Ingen kategori"}</p>
+            </div>
+            <button onClick={() => slet(b.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen børn endnu.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Felt({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <input value={v} onChange={(e) => on(e.target.value)}
+        className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+    </div>
+  );
+}
+
+// ===== PERSONALE =====
+function PersonalePanel({ orgId }: { orgId: string }) {
+  const [list, setList] = useState<any[]>([]);
+
+  const indlaes = useCallback(async () => {
+    const { data } = await supabase.from("organization_members")
+      .select("id, role, status, user_id, profiles:user_id(email, full_name)")
+      .eq("organization_id", orgId);
+    setList(data ?? []);
+  }, [orgId]);
+  useEffect(() => { indlaes(); }, [indlaes]);
+
+  const fjern = async (id: string) => {
+    if (!confirm("Fjern denne person fra organisationen?")) return;
+    const { error } = await supabase.from("organization_members").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+
+  const skiftRolle = async (m: any) => {
+    const ny = m.role === "admin" ? "employee" : "admin";
+    const { error } = await supabase.from("organization_members").update({ role: ny }).eq("id", m.id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-2xl p-4 text-sm text-muted-foreground">
+        Invitationer via e-mail kommer i næste fase. Indtil da kan personale selv oprette en konto via signup-siden, hvorefter du kan tilføje dem manuelt i databasen eller bruge invitationsfunktionen, når den er klar.
+      </div>
+      <div className="grid gap-2">
+        {list.map((m) => (
+          <div key={m.id} className="glass flex items-center justify-between rounded-xl p-3">
+            <div>
+              <p className="font-semibold">{m.profiles?.full_name ?? m.profiles?.email ?? m.user_id}</p>
+              <p className="text-xs text-muted-foreground">{m.profiles?.email}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => skiftRolle(m)}
+                className={`rounded-lg px-3 py-1 text-xs font-medium ${m.role === "admin" ? "bg-accent/20 text-accent" : "bg-surface text-muted-foreground"}`}>
+                {m.role === "admin" ? "Admin" : "Personale"}
+              </button>
+              <button onClick={() => fjern(m.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen medlemmer endnu.</p>}
+      </div>
+    </div>
+  );
+}
