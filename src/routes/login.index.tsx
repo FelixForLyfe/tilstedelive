@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Sparkles, ShieldCheck, Users } from "lucide-react";
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/login/")({
   component: LoginVaelg,
 });
 

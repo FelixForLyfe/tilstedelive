@@ -13,6 +13,8 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignupIndexRouteImport } from './routes/signup.index'
+import { Route as LoginIndexRouteImport } from './routes/login.index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as SignupPersonaleRouteImport } from './routes/signup.personale'
 import { Route as LoginPersonaleRouteImport } from './routes/login.personale'
@@ -41,6 +43,16 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SignupIndexRoute = SignupIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SignupRoute,
+} as any)
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LoginRoute,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
@@ -96,11 +108,11 @@ export interface FileRoutesByFullPath {
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app/': typeof AppIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/signup/': typeof SignupIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRouteWithChildren
-  '/signup': typeof SignupRouteWithChildren
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -109,6 +121,8 @@ export interface FileRoutesByTo {
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app': typeof AppIndexRoute
+  '/login': typeof LoginIndexRoute
+  '/signup': typeof SignupIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -124,6 +138,8 @@ export interface FileRoutesById {
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app/': typeof AppIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/signup/': typeof SignupIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -140,11 +156,11 @@ export interface FileRouteTypes {
     | '/login/personale'
     | '/signup/personale'
     | '/app/'
+    | '/login/'
+    | '/signup/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/login'
-    | '/signup'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -153,6 +169,8 @@ export interface FileRouteTypes {
     | '/login/personale'
     | '/signup/personale'
     | '/app'
+    | '/login'
+    | '/signup'
   id:
     | '__root__'
     | '/'
@@ -167,6 +185,8 @@ export interface FileRouteTypes {
     | '/login/personale'
     | '/signup/personale'
     | '/app/'
+    | '/login/'
+    | '/signup/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -205,6 +225,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/signup/': {
+      id: '/signup/'
+      path: '/'
+      fullPath: '/signup/'
+      preLoaderRoute: typeof SignupIndexRouteImport
+      parentRoute: typeof SignupRoute
+    }
+    '/login/': {
+      id: '/login/'
+      path: '/'
+      fullPath: '/login/'
+      preLoaderRoute: typeof LoginIndexRouteImport
+      parentRoute: typeof LoginRoute
     }
     '/app/': {
       id: '/app/'
@@ -286,21 +320,25 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 interface LoginRouteChildren {
   LoginAdminRoute: typeof LoginAdminRoute
   LoginPersonaleRoute: typeof LoginPersonaleRoute
+  LoginIndexRoute: typeof LoginIndexRoute
 }
 
 const LoginRouteChildren: LoginRouteChildren = {
   LoginAdminRoute: LoginAdminRoute,
   LoginPersonaleRoute: LoginPersonaleRoute,
+  LoginIndexRoute: LoginIndexRoute,
 }
 
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
 interface SignupRouteChildren {
   SignupPersonaleRoute: typeof SignupPersonaleRoute
+  SignupIndexRoute: typeof SignupIndexRoute
 }
 
 const SignupRouteChildren: SignupRouteChildren = {
   SignupPersonaleRoute: SignupPersonaleRoute,
+  SignupIndexRoute: SignupIndexRoute,
 }
 
 const SignupRouteWithChildren =
