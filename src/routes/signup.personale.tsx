@@ -4,6 +4,7 @@ import { Sparkles, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export const Route = createFileRoute("/signup/personale")({
   component: PersonaleSignup,
@@ -114,8 +115,7 @@ function PersonaleSignup() {
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <PasswordInput required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
             </div>
             <button type="submit" disabled={loading}
               className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">

@@ -5,6 +5,7 @@ import { Sparkles, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrganizationAdmin } from "@/server/organization.functions";
 import { toast } from "sonner";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export const Route = createFileRoute("/signup/")({
   component: SignupSide,
@@ -98,13 +99,12 @@ function SignupSide() {
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <input
-                type="password"
+              <PasswordInput
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+                className="mt-1"
               />
             </div>
 
