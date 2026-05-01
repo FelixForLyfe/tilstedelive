@@ -59,34 +59,60 @@ function SignupSide() {
             <ShieldCheck className="h-3.5 w-3.5" /> Admin
           </div>
           <h1 className="font-display text-2xl font-bold">Opret organisation</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Du bliver admin på et nyt dashboard som dit personale kan logge ind på.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Du bliver admin på et nyt dashboard som dit personale kan logge ind på.
+          </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div>
               <label className="text-sm font-medium">Dit fulde navn</label>
-              <input required value={navn} onChange={(e) => setNavn(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                required
+                value={navn}
+                onChange={(e) => setNavn(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Organisationens navn</label>
-              <input required value={orgNavn} onChange={(e) => setOrgNavn(e.target.value)}
+              <input
+                required
+                value={orgNavn}
+                onChange={(e) => setOrgNavn(e.target.value)}
                 placeholder="Fx Solsikkens SFO"
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
-              <p className="mt-1 text-xs text-muted-foreground">Personalet bruger dette navn når de logger ind.</p>
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Personalet bruger dette navn når de logger ind.
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium">E-mail</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
 
-            <button type="submit" disabled={loading}
-              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
+            >
               {loading ? "Opretter…" : "Opret organisation"}
             </button>
           </form>
@@ -94,11 +120,15 @@ function SignupSide() {
           <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
             <p>
               Har du allerede en organisation?{" "}
-              <Link to="/login/admin" className="font-semibold text-primary hover:underline">Admin-login</Link>
+              <Link to="/login/admin" className="font-semibold text-primary hover:underline">
+                Admin-login
+              </Link>
             </p>
             <p>
               Er du personale?{" "}
-              <Link to="/signup/personale" className="font-semibold text-primary hover:underline">Opret personale-konto</Link>
+              <Link to="/signup/personale" className="font-semibold text-primary hover:underline">
+                Opret personale-konto
+              </Link>
             </p>
           </div>
         </div>
