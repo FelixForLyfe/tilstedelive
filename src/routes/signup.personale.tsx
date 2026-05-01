@@ -71,6 +71,8 @@ function PersonaleSignup() {
       navigate({ to: "/app" });
       return;
     }
+    // Genindlæs medlemskaber så OrgContext finder den nye organisation
+    await genindlaes();
     toast.success("Velkommen", { description: "Du er nu tilføjet til organisationen." });
     navigate({ to: "/app" });
   };
