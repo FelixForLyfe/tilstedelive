@@ -55,6 +55,20 @@ function SignupSide() {
       return;
     }
 
+    // Vent til Supabase-klienten har en aktiv session (auth-header sættes async)
+    let aktivSession = null;
+    for (let i = 0; i < 20; i++) {
+      const { data: s } = await supabase.auth.getSession();
+      if (s.session?.access_token) { aktivSession = s.session; break; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (!aktivSession) {
+      setLoading(false);
+      toast.error("Kunne ikke etablere session – prøv at logge ind");
+      navigate({ to: "/login/admin" });
+      return;
+    }
+
     // Tjek om navnet allerede findes blandt brugerens orgs (sjælden race ved retry)
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
