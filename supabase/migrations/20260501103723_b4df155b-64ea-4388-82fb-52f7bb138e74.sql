@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.handle_day_close() FROM anon, authenticated, public;
