@@ -182,9 +182,23 @@ function BoernPanel({ orgId }: { orgId: string }) {
     const payload: any = { ...form, organization_id: orgId };
     if (!payload.category_id) payload.category_id = null;
     if (!payload.default_leave_time) payload.default_leave_time = null;
-    const { error } = await supabase.from("children").insert(payload);
-    if (error) return toast.error(error.message);
-    toast.success("Barn tilføjet"); reset(); setAaben(false); indlaes();
+
+    // Optimistisk: luk formularen og vis barnet med det samme
+    const tempId = `temp-${Date.now()}`;
+    const kat = kategorier.find((k) => k.id === payload.category_id);
+    const optimistisk = { ...payload, id: tempId, categories: kat ? { name: kat.name } : null };
+    setList((prev) => [...prev, optimistisk].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+    reset();
+    setAaben(false);
+    toast.success("Barn tilføjet");
+
+    const { data, error } = await supabase.from("children").insert(payload).select("*, categories(name)").single();
+    if (error) {
+      setList((prev) => prev.filter((x) => x.id !== tempId));
+      toast.error(error.message);
+      return;
+    }
+    setList((prev) => prev.map((x) => (x.id === tempId ? data : x)));
   };
   const slet = async (id: string) => {
     if (!confirm("Slet barn? Alle tilknyttede data slettes.")) return;
