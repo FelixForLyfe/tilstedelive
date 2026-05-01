@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
-import { useEffect } from "react";
+
 import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,12 +20,7 @@ function AppLayout() {
   const navigate = useNavigate();
   const path = useRouterState({ select: (r) => r.location.pathname });
 
-  useEffect(() => {
-    if (loading) return;
-    if (erAdmin && path === "/app") {
-      navigate({ to: "/app/admin" });
-    }
-  }, [loading, erAdmin, path, navigate]);
+  // Begge roller (admin + personale) lander på status-siden, hvor man tjekker børn ind/ud.
 
   const handleLogout = async () => {
     await logUd();
@@ -33,7 +28,7 @@ function AppLayout() {
   };
 
   const navItems = [
-    { to: "/app", label: "Forside", icon: Home, exact: true },
+    { to: "/app", label: "Status", icon: Home, exact: true },
     { to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity },
     { to: "/app/logning", label: "Logning", icon: Clock },
     ...(erAdmin ? [
