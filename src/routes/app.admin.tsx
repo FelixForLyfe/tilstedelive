@@ -281,13 +281,27 @@ function Felt({ label, v, on }: { label: string; v: string; on: (v: string) => v
 // ===== PERSONALE =====
 function PersonalePanel({ orgId }: { orgId: string }) {
   const [list, setList] = useState<any[]>([]);
+  const [invites, setInvites] = useState<any[]>([]);
+  const [vagter, setVagter] = useState<any[]>([]);
+  const [opretterInvite, setOpretterInvite] = useState(false);
+  const [nyRolle, setNyRolle] = useState<"employee" | "admin">("employee");
+  const dato = new Date().toISOString().slice(0, 10);
 
   const indlaes = useCallback(async () => {
-    const { data } = await supabase.from("organization_members")
-      .select("id, role, status, user_id, profiles:user_id(email, full_name)")
-      .eq("organization_id", orgId);
-    setList(data ?? []);
-  }, [orgId]);
+    const [m, i, v] = await Promise.all([
+      supabase.from("organization_members")
+        .select("id, role, status, user_id, profiles:user_id(email, full_name)")
+        .eq("organization_id", orgId),
+      supabase.from("organization_invites")
+        .select("*").eq("organization_id", orgId).order("created_at", { ascending: false }),
+      supabase.from("employee_time_logs")
+        .select("*, profiles:user_id(full_name, email)")
+        .eq("organization_id", orgId).eq("date", dato),
+    ]);
+    setList(m.data ?? []);
+    setInvites(i.data ?? []);
+    setVagter(v.data ?? []);
+  }, [orgId, dato]);
   useEffect(() => { indlaes(); }, [indlaes]);
 
   const fjern = async (id: string) => {
@@ -304,31 +318,125 @@ function PersonalePanel({ orgId }: { orgId: string }) {
     indlaes();
   };
 
+  const genererKode = () => {
+    const tegn = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for (let i = 0; i < 8; i++) s += tegn[Math.floor(Math.random() * tegn.length)];
+    return s;
+  };
+
+  const opretInvite = async () => {
+    setOpretterInvite(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setOpretterInvite(false); return; }
+    const code = genererKode();
+    const { error } = await supabase.from("organization_invites").insert({
+      organization_id: orgId, code, role: nyRolle, created_by: user.id,
+    });
+    setOpretterInvite(false);
+    if (error) return toast.error(error.message);
+    toast.success("Kode oprettet", { description: code });
+    indlaes();
+  };
+
+  const sletInvite = async (id: string) => {
+    const { error } = await supabase.from("organization_invites").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    indlaes();
+  };
+
+  const kopier = async (kode: string) => {
+    try {
+      await navigator.clipboard.writeText(kode);
+      toast.success("Kopieret");
+    } catch {
+      toast.error("Kunne ikke kopiere");
+    }
+  };
+
+  const aktiveInvites = invites.filter((i) => !i.used_at && new Date(i.expires_at) > new Date());
+
+  const formaterTimer = (v: any) => {
+    if (!v.shift_started_at) return "–";
+    const start = new Date(v.shift_started_at).getTime();
+    const slut = v.shift_ended_at ? new Date(v.shift_ended_at).getTime() : Date.now();
+    const min = Math.max(0, Math.round((slut - start) / 60000) - (v.total_break_minutes ?? 0));
+    return `${Math.floor(min / 60)}t ${min % 60}m`;
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="glass rounded-2xl p-4 text-sm text-muted-foreground">
-        Invitationer via e-mail kommer i næste fase. Indtil da kan personale selv oprette en konto via signup-siden, hvorefter du kan tilføje dem manuelt i databasen eller bruge invitationsfunktionen, når den er klar.
-      </div>
-      <div className="grid gap-2">
-        {list.map((m) => (
-          <div key={m.id} className="glass flex items-center justify-between rounded-xl p-3">
-            <div>
-              <p className="font-semibold">{m.profiles?.full_name ?? m.profiles?.email ?? m.user_id}</p>
-              <p className="text-xs text-muted-foreground">{m.profiles?.email}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => skiftRolle(m)}
-                className={`rounded-lg px-3 py-1 text-xs font-medium ${m.role === "admin" ? "bg-accent/20 text-accent" : "bg-surface text-muted-foreground"}`}>
-                {m.role === "admin" ? "Admin" : "Personale"}
-              </button>
-              <button onClick={() => fjern(m.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
+    <div className="space-y-6">
+      {/* Invite-koder */}
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Inviter personale</h2>
+        <div className="glass flex flex-wrap items-center gap-2 rounded-2xl p-4">
+          <select value={nyRolle} onChange={(e) => setNyRolle(e.target.value as any)}
+            className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
+            <option value="employee">Personale</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button disabled={opretterInvite} onClick={opretInvite}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50">
+            <Plus className="h-4 w-4" /> Generér invitations-kode
+          </button>
+          <p className="text-xs text-muted-foreground">Koder er gyldige i 14 dage.</p>
+        </div>
+
+        {aktiveInvites.length > 0 && (
+          <div className="grid gap-2">
+            {aktiveInvites.map((i) => (
+              <div key={i.id} className="glass flex items-center justify-between gap-3 rounded-xl p-3">
+                <div className="min-w-0">
+                  <button onClick={() => kopier(i.code)}
+                    className="font-mono text-lg font-bold tracking-widest text-primary hover:underline">
+                    {i.code}
+                  </button>
+                  <p className="text-xs text-muted-foreground">
+                    {i.role === "admin" ? "Admin" : "Personale"} · udløber {new Date(i.expires_at).toLocaleDateString("da-DK")}
+                  </p>
+                </div>
+                <button onClick={() => sletInvite(i.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
-        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen medlemmer endnu.</p>}
-      </div>
+        )}
+      </section>
+
+      {/* Medlemmer */}
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Medlemmer</h2>
+        <div className="grid gap-2">
+          {list.map((m) => {
+            const vagt = vagter.find((v) => v.user_id === m.user_id);
+            return (
+              <div key={m.id} className="glass flex items-center justify-between rounded-xl p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{m.profiles?.full_name ?? m.profiles?.email ?? m.user_id}</p>
+                  <p className="text-xs text-muted-foreground">{m.profiles?.email}</p>
+                  <p className="mt-1 text-xs">
+                    {!vagt && <span className="text-muted-foreground">Ikke startet i dag</span>}
+                    {vagt?.status === "working" && <span className="text-success">På vagt · {formaterTimer(vagt)}</span>}
+                    {vagt?.status === "on_break" && <span className="text-warning">På pause</span>}
+                    {vagt?.status === "finished" && <span className="text-muted-foreground">Afsluttet · {formaterTimer(vagt)}</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => skiftRolle(m)}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium ${m.role === "admin" ? "bg-accent/20 text-accent" : "bg-surface text-muted-foreground"}`}>
+                    {m.role === "admin" ? "Admin" : "Personale"}
+                  </button>
+                  <button onClick={() => fjern(m.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen medlemmer endnu.</p>}
+        </div>
+      </section>
     </div>
   );
 }
