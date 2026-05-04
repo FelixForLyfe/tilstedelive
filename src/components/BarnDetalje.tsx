@@ -109,18 +109,6 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
               </div>
             </div>
 
-            {/* Noter */}
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Noter</label>
-              <textarea value={noter} onChange={(e) => setNoter(e.target.value)} rows={4}
-                placeholder="Tilføj en note om barnet…"
-                className="mt-1 w-full rounded-xl border border-input bg-background p-3 text-sm" />
-              <button onClick={gemNoter} disabled={gemmer || noter === (barn.notes ?? "")}
-                className="mt-2 inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-                {gemmer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Gem note
-              </button>
-            </div>
 
             {/* Information */}
             <div className="grid gap-3 sm:grid-cols-2">
