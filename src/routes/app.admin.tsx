@@ -169,7 +169,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [uploader, setUploader] = useState(false);
   const fotoRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
 
   const indlaes = useCallback(async () => {
     const [b, k] = await Promise.all([
@@ -181,7 +181,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
   useEffect(() => { indlaes(); }, [indlaes]);
 
   const reset = () => {
-    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
     setFoto(null); setFotoPreview(null);
   };
 
