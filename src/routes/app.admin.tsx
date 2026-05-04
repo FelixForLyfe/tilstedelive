@@ -291,11 +291,6 @@ function BoernPanel({ orgId }: { orgId: string }) {
             Må gå hjem alene
           </label>
           <div className="md:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Note</label>
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2}
-              className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
-          </div>
-          <div className="md:col-span-2">
             <button disabled={uploader} className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
               {uploader && <Loader2 className="h-4 w-4 animate-spin" />}
               Gem barn
