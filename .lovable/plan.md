@@ -1,36 +1,35 @@
-## Fix two security findings
+## Fix: import-protection rejects dynamic `.server` import in `__root.tsx`
 
-### 1. Server-side MIME + size enforcement on `child-photos` bucket
+### Problem
+The TanStack import-protection plugin scans the client bundle's import graph statically. Both `await import("@tanstack/react-start/server")` and `await import("@/server/security-headers.server")` are flagged because `__root.tsx` is reachable from the client bundle, and the plugin treats any reference (static or dynamic) to `*.server.*` / server-only modules as a violation. The runtime `if (typeof window !== "undefined") return` guard does not satisfy the static analyzer.
 
-Add a migration that sets `allowed_mime_types` and `file_size_limit` on the existing private bucket so Supabase Storage rejects spoofed uploads at the edge — the client checks in `BarnDetalje.tsx` and `app.admin.tsx` stay as UX guards.
+### Fix
+Use `createIsomorphicFn` (the plugin's own recommended escape hatch) so the client bundle gets a no-op and the server bundle gets the real implementation. This removes the need for any dynamic import or `.server` filename in `__root.tsx`.
 
-```sql
-UPDATE storage.buckets
-SET allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif'],
-    file_size_limit = 5242880  -- 5 MB
-WHERE id = 'child-photos';
-```
+### Steps
+1. Create `src/lib/security-headers.ts` exporting:
+   ```ts
+   import { createIsomorphicFn } from "@tanstack/react-start";
+   import { setResponseHeaders } from "@tanstack/react-start/server";
 
-No app code changes needed; existing uploads continue to work because they already match these limits.
+   export const applySecurityHeaders = createIsomorphicFn()
+     .client(() => {})
+     .server(() => {
+       setResponseHeaders(new Headers({ /* …same CSP/HSTS/etc as today… */ }));
+     });
+   ```
+   `createIsomorphicFn` tree-shakes the `.server()` body (and its imports) out of the client bundle, so importing `@tanstack/react-start/server` at the top is safe.
 
-### 2. SECURITY DEFINER functions callable by authenticated
+2. In `src/routes/__root.tsx` replace the current `beforeLoad` block with:
+   ```ts
+   beforeLoad: () => { applySecurityHeaders(); },
+   ```
+   and add `import { applySecurityHeaders } from "@/lib/security-headers";`.
 
-Audit of the 7 SECURITY DEFINER functions in the project:
+3. Delete the now-unused `src/server/security-headers.server.ts`.
 
-| Function | Caller | Action |
-|---|---|---|
-| `handle_new_user`, `handle_day_close`, `set_updated_at` | trigger only | EXECUTE already revoked (prior migration) — re-assert |
-| `is_org_admin`, `is_org_member`, `is_day_closed` | referenced inside RLS policies on `children`, `attendance_records`, etc. | **Must remain executable** by `authenticated` — revoking breaks every RLS policy. Document as accepted risk. |
-| `redeem_invite` | called via `supabase.rpc("redeem_invite", ...)` from `signup.personale.tsx` | **Must remain executable** by `authenticated` — that is the whole point of the invite flow. Already hardened: validates `auth.uid()`, expiry, and single-use. Document as accepted risk. |
-
-Plan:
-- Migration: re-`REVOKE EXECUTE … FROM PUBLIC, anon, authenticated` on the three trigger-only functions (defensive, idempotent).
-- Mark the linter finding as **ignored** with `security--manage_security_finding` and update `@security-memory` explaining that `is_org_*`, `is_day_closed`, and `redeem_invite` are intentionally callable by `authenticated` (RLS helpers cannot be `SECURITY INVOKER` without infinite RLS recursion against `organization_members`; `redeem_invite` is the documented RPC entry point with internal validation).
-
-### Out of scope
-No changes to UI, routing, auth flows, or unrelated tables. No client-side logic change for photo upload (server enforcement is added behind it).
-
-### Files touched
-- `supabase/migrations/<new>.sql` (bucket config + idempotent revokes)
-- `mem://security` / security memory update
-- Security finding marked as ignored with rationale
+### Why this works
+- `createIsomorphicFn` is exactly what the plugin's error message suggests for this case.
+- No `.server` filename is referenced from a client-reachable file → import-protection passes.
+- Headers are still set on every SSR response → CSP, HSTS, X-Frame-Options behavior unchanged.
+- No change to routing, providers, components, or any other behavior.
