@@ -330,6 +330,26 @@ function Felt({ label, v, on }: { label: string; v: string; on: (v: string) => v
   );
 }
 
+function BarnRaekke({ barn, onOpen, onSlet }: { barn: any; onOpen: () => void; onSlet: () => void }) {
+  const fotoUrl = useChildPhoto(barn.photo_url);
+  return (
+    <div className="glass flex items-center justify-between rounded-xl p-3">
+      <button onClick={onOpen} className="flex flex-1 items-center gap-3 text-left">
+        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface ring-1 ring-border">
+          {barn.photo_url && fotoUrl ? <img src={fotoUrl} alt="" className="h-full w-full object-cover" /> : null}
+        </div>
+        <div>
+          <p className="font-semibold">{barn.full_name}</p>
+          <p className="text-xs text-muted-foreground">{barn.categories?.name ?? "Ingen kategori"}</p>
+        </div>
+      </button>
+      <button onClick={onSlet} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 // ===== PERSONALE =====
 function PersonalePanel({ orgId }: { orgId: string }) {
   const [list, setList] = useState<any[]>([]);
