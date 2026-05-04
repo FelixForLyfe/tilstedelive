@@ -164,7 +164,12 @@ function BoernPanel({ orgId }: { orgId: string }) {
   const [list, setList] = useState<any[]>([]);
   const [kategorier, setKategorier] = useState<any[]>([]);
   const [aaben, setAaben] = useState(false);
-  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+  const [detaljeId, setDetaljeId] = useState<string | null>(null);
+  const [foto, setFoto] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [uploader, setUploader] = useState(false);
+  const fotoRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
 
   const indlaes = useCallback(async () => {
     const [b, k] = await Promise.all([
@@ -175,7 +180,10 @@ function BoernPanel({ orgId }: { orgId: string }) {
   }, [orgId]);
   useEffect(() => { indlaes(); }, [indlaes]);
 
-  const reset = () => setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+  const reset = () => {
+    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+    setFoto(null); setFotoPreview(null);
+  };
 
   const opret = async (e: FormEvent) => {
     e.preventDefault();
