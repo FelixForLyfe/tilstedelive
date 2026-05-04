@@ -21,15 +21,12 @@ type Barn = {
   special_notes?: string | null;
   default_leave_time?: string | null;
   can_leave_alone?: boolean | null;
-  notes?: string | null;
   photo_url?: string | null;
 };
 
 export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; open: boolean; onClose: () => void }) {
   const { erAdmin } = useOrg();
   const [barn, setBarn] = useState<Barn | null>(null);
-  const [noter, setNoter] = useState("");
-  const [gemmer, setGemmer] = useState(false);
   const [uploader, setUploader] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
