@@ -4,6 +4,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { OrgProvider } from "@/contexts/OrgContext";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { applySecurityHeaders } from "@/lib/security-headers";
 
 function NotFoundComponent() {
   return (
@@ -28,14 +29,8 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRoute({
-  beforeLoad: async () => {
-    if (typeof window !== "undefined") return;
-    try {
-      const { applySecurityHeaders } = await import("@/server/security-headers.server");
-      applySecurityHeaders();
-    } catch {
-      // ignore — headers are best-effort during SSR
-    }
+  beforeLoad: () => {
+    applySecurityHeaders();
   },
   head: () => ({
     meta: [
