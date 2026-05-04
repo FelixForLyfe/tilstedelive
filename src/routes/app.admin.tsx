@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
+import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/admin")({
@@ -163,7 +164,12 @@ function BoernPanel({ orgId }: { orgId: string }) {
   const [list, setList] = useState<any[]>([]);
   const [kategorier, setKategorier] = useState<any[]>([]);
   const [aaben, setAaben] = useState(false);
-  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+  const [detaljeId, setDetaljeId] = useState<string | null>(null);
+  const [foto, setFoto] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [uploader, setUploader] = useState(false);
+  const fotoRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
 
   const indlaes = useCallback(async () => {
     const [b, k] = await Promise.all([
@@ -174,37 +180,52 @@ function BoernPanel({ orgId }: { orgId: string }) {
   }, [orgId]);
   useEffect(() => { indlaes(); }, [indlaes]);
 
-  const reset = () => setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
+  const reset = () => {
+    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+    setFoto(null); setFotoPreview(null);
+  };
 
   const opret = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.full_name.trim()) return toast.error("Navn er påkrævet");
+    setUploader(true);
     const payload: any = { ...form, organization_id: orgId };
     if (!payload.category_id) payload.category_id = null;
     if (!payload.default_leave_time) payload.default_leave_time = null;
 
-    // Optimistisk: luk formularen og vis barnet med det samme
-    const tempId = `temp-${Date.now()}`;
-    const kat = kategorier.find((k) => k.id === payload.category_id);
-    const optimistisk = { ...payload, id: tempId, categories: kat ? { name: kat.name } : null };
-    setList((prev) => [...prev, optimistisk].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+    const { data, error } = await supabase.from("children").insert(payload).select("*, categories(name)").single();
+    if (error) { setUploader(false); toast.error(error.message); return; }
+
+    if (foto && data) {
+      const ext = foto.name.split(".").pop()?.toLowerCase() || "jpg";
+      const sti = `${orgId}/${data.id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, foto, { upsert: true, contentType: foto.type });
+      if (!upErr) {
+        const { data: pub } = supabase.storage.from("child-photos").getPublicUrl(sti);
+        await supabase.from("children").update({ photo_url: pub.publicUrl }).eq("id", data.id);
+        data.photo_url = pub.publicUrl;
+      } else {
+        toast.error("Billede kunne ikke uploades: " + upErr.message);
+      }
+    }
+
+    setList((prev) => [...prev, data].sort((a, b) => a.full_name.localeCompare(b.full_name)));
     reset();
     setAaben(false);
+    setUploader(false);
     toast.success("Barn tilføjet");
-
-    const { data, error } = await supabase.from("children").insert(payload).select("*, categories(name)").single();
-    if (error) {
-      setList((prev) => prev.filter((x) => x.id !== tempId));
-      toast.error(error.message);
-      return;
-    }
-    setList((prev) => prev.map((x) => (x.id === tempId ? data : x)));
   };
   const slet = async (id: string) => {
     if (!confirm("Slet barn? Alle tilknyttede data slettes.")) return;
     const { error } = await supabase.from("children").delete().eq("id", id);
     if (error) return toast.error(error.message);
     indlaes();
+  };
+
+  const valgFoto = (f: File | null) => {
+    setFoto(f);
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+    setFotoPreview(f ? URL.createObjectURL(f) : null);
   };
 
   return (
@@ -216,6 +237,31 @@ function BoernPanel({ orgId }: { orgId: string }) {
 
       {aaben && (
         <form onSubmit={opret} className="glass grid gap-3 rounded-2xl p-5 md:grid-cols-2">
+          <div className="md:col-span-2 flex items-center gap-4">
+            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
+              {fotoPreview ? (
+                <img src={fotoPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                  <Camera className="h-7 w-7" />
+                </div>
+              )}
+            </div>
+            <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => valgFoto(e.target.files?.[0] ?? null)} />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => fotoRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-xl bg-surface px-3 py-2 text-xs font-semibold hover:bg-surface-elevated">
+                <Camera className="h-4 w-4" /> {foto ? "Skift billede" : "Tag/upload billede"}
+              </button>
+              {foto && (
+                <button type="button" onClick={() => valgFoto(null)}
+                  className="rounded-xl bg-surface px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10">
+                  Fjern
+                </button>
+              )}
+            </div>
+          </div>
           <Felt label="Fulde navn *" v={form.full_name} on={(v) => setForm({ ...form, full_name: v })} />
           <div>
             <label className="text-xs font-medium text-muted-foreground">Kategori</label>
@@ -245,7 +291,15 @@ function BoernPanel({ orgId }: { orgId: string }) {
             Må gå hjem alene
           </label>
           <div className="md:col-span-2">
-            <button className="rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Gem barn</button>
+            <label className="text-xs font-medium text-muted-foreground">Note</label>
+            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2}
+              className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+          </div>
+          <div className="md:col-span-2">
+            <button disabled={uploader} className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {uploader && <Loader2 className="h-4 w-4 animate-spin" />}
+              Gem barn
+            </button>
           </div>
         </form>
       )}
@@ -253,10 +307,15 @@ function BoernPanel({ orgId }: { orgId: string }) {
       <div className="grid gap-2">
         {list.map((b) => (
           <div key={b.id} className="glass flex items-center justify-between rounded-xl p-3">
-            <div>
-              <p className="font-semibold">{b.full_name}</p>
-              <p className="text-xs text-muted-foreground">{b.categories?.name ?? "Ingen kategori"}</p>
-            </div>
+            <button onClick={() => setDetaljeId(b.id)} className="flex flex-1 items-center gap-3 text-left">
+              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface ring-1 ring-border">
+                {b.photo_url ? <img src={b.photo_url} alt="" className="h-full w-full object-cover" /> : null}
+              </div>
+              <div>
+                <p className="font-semibold">{b.full_name}</p>
+                <p className="text-xs text-muted-foreground">{b.categories?.name ?? "Ingen kategori"}</p>
+              </div>
+            </button>
             <button onClick={() => slet(b.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
               <Trash2 className="h-4 w-4" />
             </button>
@@ -264,6 +323,8 @@ function BoernPanel({ orgId }: { orgId: string }) {
         ))}
         {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen børn endnu.</p>}
       </div>
+
+      <BarnDetalje barnId={detaljeId} open={!!detaljeId} onClose={() => { setDetaljeId(null); indlaes(); }} />
     </div>
   );
 }

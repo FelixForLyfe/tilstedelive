@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BellOff, Lock, Users, Clock, Check, X, Search } from "lucide-react";
+import { Bell, BellOff, Lock, Users, Clock, Check, X, Search, Info as InfoIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrg } from "@/contexts/OrgContext";
 import { dagensDato, formaterDansk, formaterTid } from "@/lib/dansk";
 import { lyde } from "@/lib/lyde";
 import { bedOmNotifikationsTilladelse, visNotifikation } from "@/lib/notifikationer";
+import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/")({
@@ -32,7 +33,7 @@ function Hovedside() {
   const [soegning, setSoegning] = useState("");
   const [dagLukket, setDagLukket] = useState(false);
   const [notiTilladt, setNotiTilladt] = useState<NotificationPermission>("default");
-  const [redigerBarn, setRedigerBarn] = useState<Barn | null>(null);
+  const [detaljeId, setDetaljeId] = useState<string | null>(null);
   const allerede = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -275,6 +276,10 @@ function Hovedside() {
                       )}
                     </div>
                   </div>
+                  <button onClick={() => setDetaljeId(b.id)} title="Se information"
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-elevated hover:text-foreground">
+                    <InfoIcon className="h-4 w-4" />
+                  </button>
                 </div>
 
                 <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -309,6 +314,7 @@ function Hovedside() {
           })}
         </div>
       )}
+      <BarnDetalje barnId={detaljeId} open={!!detaljeId} onClose={() => setDetaljeId(null)} />
     </div>
   );
 }

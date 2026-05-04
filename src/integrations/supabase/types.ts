@@ -226,11 +226,13 @@ export type Database = {
           full_name: string
           id: string
           last_name: string | null
+          notes: string | null
           organization_id: string
           parent_1_name: string | null
           parent_1_phone: string | null
           parent_2_name: string | null
           parent_2_phone: string | null
+          photo_url: string | null
           special_notes: string | null
           updated_at: string
         }
@@ -248,11 +250,13 @@ export type Database = {
           full_name: string
           id?: string
           last_name?: string | null
+          notes?: string | null
           organization_id: string
           parent_1_name?: string | null
           parent_1_phone?: string | null
           parent_2_name?: string | null
           parent_2_phone?: string | null
+          photo_url?: string | null
           special_notes?: string | null
           updated_at?: string
         }
@@ -270,11 +274,13 @@ export type Database = {
           full_name?: string
           id?: string
           last_name?: string | null
+          notes?: string | null
           organization_id?: string
           parent_1_name?: string | null
           parent_1_phone?: string | null
           parent_2_name?: string | null
           parent_2_phone?: string | null
+          photo_url?: string | null
           special_notes?: string | null
           updated_at?: string
         }
