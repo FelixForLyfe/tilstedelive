@@ -57,7 +57,7 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
     setUploader(true);
     const ext = (fil.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
     const sti = `${barn.organization_id}/${barn.id}-${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, fil, { upsert: true, contentType: fil.type });
+    const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, fil, { upsert: false, contentType: fil.type });
     if (upErr) { setUploader(false); return toast.error(upErr.message); }
     const { error: updErr } = await supabase.from("children").update({ photo_url: sti }).eq("id", barn.id);
     setUploader(false);

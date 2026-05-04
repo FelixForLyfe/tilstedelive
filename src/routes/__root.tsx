@@ -28,6 +28,23 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRoute({
+  beforeLoad: async () => {
+    if (typeof window !== "undefined") return;
+    try {
+      const { setResponseHeaders } = await import("@tanstack/react-start/server");
+      setResponseHeaders(
+        new Headers({
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+          "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+        }),
+      );
+    } catch {
+      // ignore — headers are best-effort during SSR
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
