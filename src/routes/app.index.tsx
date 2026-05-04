@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BellOff, Lock, Users, Clock, Check, X, Search, Info as InfoIcon, StickyNote } from "lucide-react";
+import { Bell, BellOff, Lock, Users, Clock, Check, X, Search, Info as InfoIcon, StickyNote, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrg } from "@/contexts/OrgContext";
@@ -32,6 +32,7 @@ function Hovedside() {
   const [fremmoede, setFremmoede] = useState<Record<string, Fremmoede>>({});
   const [valgtKategori, setValgtKategori] = useState<string>("alle");
   const [soegning, setSoegning] = useState("");
+  const [kunTilstede, setKunTilstede] = useState(false);
   const [dagLukket, setDagLukket] = useState(false);
   const [notiTilladt, setNotiTilladt] = useState<NotificationPermission>("default");
   const [detaljeId, setDetaljeId] = useState<string | null>(null);
@@ -106,10 +107,11 @@ function Hovedside() {
     let res = boern;
     if (valgtKategori === "ingen") res = res.filter((b) => !b.category_id);
     else if (valgtKategori !== "alle") res = res.filter((b) => b.category_id === valgtKategori);
+    if (kunTilstede) res = res.filter((b) => fremmoede[b.id]?.status === "present");
     const q = soegning.trim().toLowerCase();
     if (q) res = res.filter((b) => b.full_name.toLowerCase().includes(q));
     return res;
-  }, [boern, valgtKategori, soegning]);
+  }, [boern, valgtKategori, soegning, kunTilstede, fremmoede]);
 
   const tilstedeAntal = useMemo(
     () => Object.values(fremmoede).filter((f) => f.status === "present").length,
@@ -251,6 +253,20 @@ function Hovedside() {
           })}
           <option value="ingen">Uden kategori</option>
         </select>
+        <button
+          type="button"
+          onClick={() => setKunTilstede((v) => !v)}
+          aria-pressed={kunTilstede}
+          title={kunTilstede ? "Vis alle børn" : "Vis kun børn der er tilstede"}
+          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+            kunTilstede
+              ? "border-success/40 bg-success/15 text-success"
+              : "border-border bg-surface hover:bg-surface-elevated"
+          }`}
+        >
+          <UserCheck className="h-4 w-4" />
+          Tilstede ({tilstedeAntal})
+        </button>
       </div>
 
       {filtrede.length === 0 ? (
