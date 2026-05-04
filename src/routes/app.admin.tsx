@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
+import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/admin")({
