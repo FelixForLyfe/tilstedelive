@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SikkerhedRouteImport } from './routes/sikkerhed'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
@@ -24,6 +25,11 @@ import { Route as AppArkivRouteImport } from './routes/app.arkiv'
 import { Route as AppAktiviteterRouteImport } from './routes/app.aktiviteter'
 import { Route as AppAdminRouteImport } from './routes/app.admin'
 
+const SikkerhedRoute = SikkerhedRouteImport.update({
+  id: '/sikkerhed',
+  path: '/sikkerhed',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRouteWithChildren
   '/signup': typeof SignupRouteWithChildren
+  '/sikkerhed': typeof SikkerhedRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/sikkerhed': typeof SikkerhedRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRouteWithChildren
   '/signup': typeof SignupRouteWithChildren
+  '/sikkerhed': typeof SikkerhedRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/signup'
+    | '/sikkerhed'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/sikkerhed'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/signup'
+    | '/sikkerhed'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -194,10 +206,18 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRouteWithChildren
   SignupRoute: typeof SignupRouteWithChildren
+  SikkerhedRoute: typeof SikkerhedRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sikkerhed': {
+      id: '/sikkerhed'
+      path: '/sikkerhed'
+      fullPath: '/sikkerhed'
+      preLoaderRoute: typeof SikkerhedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRouteWithChildren,
   SignupRoute: SignupRouteWithChildren,
+  SikkerhedRoute: SikkerhedRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
