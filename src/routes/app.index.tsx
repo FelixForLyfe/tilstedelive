@@ -165,6 +165,21 @@ function Hovedside() {
     else { lyde.bekraeftelse(); allerede.current.delete(eksisterende?.id ?? ""); }
   };
 
+  const gemDagligNote = async (barn: Barn, tekst: string) => {
+    if (dagLukket) { toast.error("Dagen er lukket"); return; }
+    if (!aktivOrgId || !user) return;
+    const eksisterende = fremmoede[barn.id];
+    const payload: any = {
+      organization_id: aktivOrgId, child_id: barn.id, date: dato, updated_by: user.id,
+      daily_note: tekst.trim() || null,
+    };
+    const { error } = eksisterende
+      ? await supabase.from("attendance_records").update(payload).eq("id", eksisterende.id)
+      : await supabase.from("attendance_records").insert({ ...payload, status: "absent" });
+    if (error) toast.error("Kunne ikke gemme note", { description: error.message });
+    else { lyde.bekraeftelse(); toast.success("Note gemt"); }
+  };
+
   const aktivér = async () => {
     const tilladt = await bedOmNotifikationsTilladelse();
     setNotiTilladt(tilladt);
