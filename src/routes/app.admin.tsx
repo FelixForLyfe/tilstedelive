@@ -413,9 +413,20 @@ function PersonalePanel({ orgId }: { orgId: string }) {
 
   const genererKode = () => {
     const tegn = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let s = "";
-    for (let i = 0; i < 8; i++) s += tegn[Math.floor(Math.random() * tegn.length)];
-    return s;
+    // CSPRNG; rejection-sampling for at undgå modulo-bias
+    const ud = new Array<string>(10);
+    const buf = new Uint8Array(64);
+    let i = 0;
+    while (i < 10) {
+      crypto.getRandomValues(buf);
+      for (let j = 0; j < buf.length && i < 10; j++) {
+        const b = buf[j];
+        if (b < 256 - (256 % tegn.length)) {
+          ud[i++] = tegn[b % tegn.length];
+        }
+      }
+    }
+    return ud.join("");
   };
 
   const opretInvite = async () => {
