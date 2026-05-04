@@ -38,22 +38,11 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
       if (!aktiv) return;
       if (error) { toast.error(error.message); return; }
       setBarn(data as Barn);
-      setNoter((data as Barn)?.notes ?? "");
     })();
     return () => { aktiv = false; };
   }, [barnId, open]);
 
   if (!open) return null;
-
-  const gemNoter = async () => {
-    if (!barn) return;
-    setGemmer(true);
-    const { error } = await supabase.from("children").update({ notes: noter }).eq("id", barn.id);
-    setGemmer(false);
-    if (error) return toast.error(error.message);
-    toast.success("Note gemt");
-    setBarn({ ...barn, notes: noter });
-  };
 
   const uploadFoto = async (fil: File) => {
     if (!barn) return;
