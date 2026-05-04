@@ -20,6 +20,7 @@ type Fremmoede = {
   id: string; child_id: string; status: "present" | "absent" | "picked_up";
   checked_in_at: string | null; checked_out_at: string | null;
   leave_time: string | null; leave_time_unspecified: boolean; leave_notified: boolean;
+  daily_note: string | null;
 };
 
 function Hovedside() {
