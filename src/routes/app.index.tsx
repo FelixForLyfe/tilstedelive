@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BellOff, Lock, Users, Clock, Check, X, Search, Info as InfoIcon } from "lucide-react";
+import { Bell, BellOff, Lock, Users, Clock, Check, X, Search, Info as InfoIcon, StickyNote } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrg } from "@/contexts/OrgContext";
@@ -20,6 +20,7 @@ type Fremmoede = {
   id: string; child_id: string; status: "present" | "absent" | "picked_up";
   checked_in_at: string | null; checked_out_at: string | null;
   leave_time: string | null; leave_time_unspecified: boolean; leave_notified: boolean;
+  daily_note: string | null;
 };
 
 function Hovedside() {
@@ -164,6 +165,21 @@ function Hovedside() {
     else { lyde.bekraeftelse(); allerede.current.delete(eksisterende?.id ?? ""); }
   };
 
+  const gemDagligNote = async (barn: Barn, tekst: string) => {
+    if (dagLukket) { toast.error("Dagen er lukket"); return; }
+    if (!aktivOrgId || !user) return;
+    const eksisterende = fremmoede[barn.id];
+    const payload: any = {
+      organization_id: aktivOrgId, child_id: barn.id, date: dato, updated_by: user.id,
+      daily_note: tekst.trim() || null,
+    };
+    const { error } = eksisterende
+      ? await supabase.from("attendance_records").update(payload).eq("id", eksisterende.id)
+      : await supabase.from("attendance_records").insert({ ...payload, status: "absent" });
+    if (error) toast.error("Kunne ikke gemme note", { description: error.message });
+    else { lyde.bekraeftelse(); toast.success("Note gemt"); }
+  };
+
   const aktivér = async () => {
     const tilladt = await bedOmNotifikationsTilladelse();
     setNotiTilladt(tilladt);
@@ -303,11 +319,12 @@ function Hovedside() {
                     value={f?.leave_time?.slice(0, 5) ?? ""}
                     onChange={(e) => saetHjemsendelse(b, e.target.value)}
                     className="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-xs disabled:opacity-50" />
-                  <button disabled={dagLukket} title="Ukendt tidspunkt"
-                    onClick={() => saetHjemsendelse(b, "X")}
-                    className={`rounded-lg px-2 py-1.5 text-xs font-bold ${f?.leave_time_unspecified ? "bg-warning text-warning-foreground" : "bg-surface hover:bg-surface-elevated"} disabled:opacity-50`}>
-                    X
-                  </button>
+                  <DagligNote
+                    barn={b}
+                    fremmoede={f}
+                    dagLukket={dagLukket}
+                    onGem={(tekst) => gemDagligNote(b, tekst)}
+                  />
                 </div>
               </div>
             );
@@ -316,5 +333,49 @@ function Hovedside() {
       )}
       <BarnDetalje barnId={detaljeId} open={!!detaljeId} onClose={() => setDetaljeId(null)} />
     </div>
+  );
+}
+
+function DagligNote({ barn, fremmoede, dagLukket, onGem }: {
+  barn: Barn;
+  fremmoede: Fremmoede | undefined;
+  dagLukket: boolean;
+  onGem: (tekst: string) => void | Promise<void>;
+}) {
+  const [aaben, setAaben] = useState(false);
+  const [tekst, setTekst] = useState(fremmoede?.daily_note ?? "");
+  useEffect(() => { setTekst(fremmoede?.daily_note ?? ""); }, [fremmoede?.daily_note]);
+  const harNote = !!fremmoede?.daily_note;
+
+  return (
+    <>
+      <button disabled={dagLukket} title="Dagens note"
+        onClick={() => setAaben(true)}
+        className={`relative rounded-lg px-2 py-1.5 text-xs font-bold ${harNote ? "bg-warning text-warning-foreground" : "bg-surface hover:bg-surface-elevated"} disabled:opacity-50`}>
+        <StickyNote className="h-3.5 w-3.5" />
+        {harNote && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-warning ring-2 ring-background" />}
+      </button>
+      {aaben && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAaben(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+            className="glass w-full max-w-md space-y-3 rounded-t-3xl p-5 sm:rounded-3xl">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Dagens note</p>
+              <h3 className="font-display text-lg font-semibold">{barn.full_name}</h3>
+            </div>
+            <textarea value={tekst} onChange={(e) => setTekst(e.target.value)} rows={4}
+              autoFocus
+              placeholder="Fx besked fra forælder, særlig info for i dag…"
+              className="w-full rounded-xl border border-input bg-background p-3 text-sm" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setAaben(false)}
+                className="rounded-xl bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-elevated">Annullér</button>
+              <button onClick={async () => { await onGem(tekst); setAaben(false); }}
+                className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Gem note</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

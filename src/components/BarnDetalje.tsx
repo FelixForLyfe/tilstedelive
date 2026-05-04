@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, X, Loader2, Save, Trash2 } from "lucide-react";
+import { Camera, X, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
@@ -21,15 +21,12 @@ type Barn = {
   special_notes?: string | null;
   default_leave_time?: string | null;
   can_leave_alone?: boolean | null;
-  notes?: string | null;
   photo_url?: string | null;
 };
 
 export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; open: boolean; onClose: () => void }) {
   const { erAdmin } = useOrg();
   const [barn, setBarn] = useState<Barn | null>(null);
-  const [noter, setNoter] = useState("");
-  const [gemmer, setGemmer] = useState(false);
   const [uploader, setUploader] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -41,22 +38,11 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
       if (!aktiv) return;
       if (error) { toast.error(error.message); return; }
       setBarn(data as Barn);
-      setNoter((data as Barn)?.notes ?? "");
     })();
     return () => { aktiv = false; };
   }, [barnId, open]);
 
   if (!open) return null;
-
-  const gemNoter = async () => {
-    if (!barn) return;
-    setGemmer(true);
-    const { error } = await supabase.from("children").update({ notes: noter }).eq("id", barn.id);
-    setGemmer(false);
-    if (error) return toast.error(error.message);
-    toast.success("Note gemt");
-    setBarn({ ...barn, notes: noter });
-  };
 
   const uploadFoto = async (fil: File) => {
     if (!barn) return;
@@ -123,18 +109,6 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
               </div>
             </div>
 
-            {/* Noter */}
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Noter</label>
-              <textarea value={noter} onChange={(e) => setNoter(e.target.value)} rows={4}
-                placeholder="Tilføj en note om barnet…"
-                className="mt-1 w-full rounded-xl border border-input bg-background p-3 text-sm" />
-              <button onClick={gemNoter} disabled={gemmer || noter === (barn.notes ?? "")}
-                className="mt-2 inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-                {gemmer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Gem note
-              </button>
-            </div>
 
             {/* Information */}
             <div className="grid gap-3 sm:grid-cols-2">

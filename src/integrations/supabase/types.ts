@@ -119,6 +119,7 @@ export type Database = {
           checked_out_at: string | null
           child_id: string
           created_at: string
+          daily_note: string | null
           date: string
           id: string
           leave_notified: boolean
@@ -134,6 +135,7 @@ export type Database = {
           checked_out_at?: string | null
           child_id: string
           created_at?: string
+          daily_note?: string | null
           date: string
           id?: string
           leave_notified?: boolean
@@ -149,6 +151,7 @@ export type Database = {
           checked_out_at?: string | null
           child_id?: string
           created_at?: string
+          daily_note?: string | null
           date?: string
           id?: string
           leave_notified?: boolean
@@ -226,7 +229,6 @@ export type Database = {
           full_name: string
           id: string
           last_name: string | null
-          notes: string | null
           organization_id: string
           parent_1_name: string | null
           parent_1_phone: string | null
@@ -250,7 +252,6 @@ export type Database = {
           full_name: string
           id?: string
           last_name?: string | null
-          notes?: string | null
           organization_id: string
           parent_1_name?: string | null
           parent_1_phone?: string | null
@@ -274,7 +275,6 @@ export type Database = {
           full_name?: string
           id?: string
           last_name?: string | null
-          notes?: string | null
           organization_id?: string
           parent_1_name?: string | null
           parent_1_phone?: string | null

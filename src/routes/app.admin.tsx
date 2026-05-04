@@ -169,7 +169,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [uploader, setUploader] = useState(false);
   const fotoRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+  const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
 
   const indlaes = useCallback(async () => {
     const [b, k] = await Promise.all([
@@ -181,7 +181,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
   useEffect(() => { indlaes(); }, [indlaes]);
 
   const reset = () => {
-    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "", notes: "" });
+    setForm({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
     setFoto(null); setFotoPreview(null);
   };
 
@@ -290,11 +290,6 @@ function BoernPanel({ orgId }: { orgId: string }) {
             <input type="checkbox" checked={form.can_leave_alone} onChange={(e) => setForm({ ...form, can_leave_alone: e.target.checked })} />
             Må gå hjem alene
           </label>
-          <div className="md:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Note</label>
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2}
-              className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
-          </div>
           <div className="md:col-span-2">
             <button disabled={uploader} className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
               {uploader && <Loader2 className="h-4 w-4 animate-spin" />}
