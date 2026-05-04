@@ -204,6 +204,52 @@ function SikkerhedSide() {
         </div>
       </section>
 
+      <section className="container mx-auto px-6 pb-16">
+        <div className="rounded-3xl border border-border bg-surface/40 p-8 backdrop-blur">
+          <div className="mb-6 text-center">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Compliance & certificeringer
+            </p>
+            <h2 className="mt-2 font-display text-2xl font-bold">
+              Bygget på en platform, der lever op til internationale standarder
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
+              Tilstede hostes på infrastruktur, der løbende auditeres mod anerkendte sikkerheds- og
+              databeskyttelsesstandarder.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-6 text-center transition hover:shadow-soft">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
+                <Globe2 className="h-7 w-7" />
+              </div>
+              <h3 className="font-display text-lg font-bold">GDPR</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Fuld overholdelse af EU's persondataforordning. Data opbevares i EU og slettes på anmodning.
+              </p>
+            </div>
+            <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-6 text-center transition hover:shadow-soft">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
+                <BadgeCheck className="h-7 w-7" />
+              </div>
+              <h3 className="font-display text-lg font-bold">SOC 2 Type II</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Uafhængigt auditerede kontroller for sikkerhed, tilgængelighed og fortrolighed.
+              </p>
+            </div>
+            <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-6 text-center transition hover:shadow-soft">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary text-primary-foreground shadow-glow">
+                <ScrollText className="h-7 w-7" />
+              </div>
+              <h3 className="font-display text-lg font-bold">ISO 27001</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Informationssikkerhedsledelse efter den internationale ISO/IEC 27001-standard.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
         Tilstede © {new Date().getFullYear()} – bygget til danske institutioner.
       </footer>
