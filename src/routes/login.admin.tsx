@@ -21,7 +21,7 @@ function AdminLogin() {
     const { data: signIn, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !signIn.user) {
       setLoading(false);
-      toast.error("Login fejlede", { description: error?.message });
+      toast.error("Login fejlede", { description: "Forkert e-mail eller adgangskode." });
       return;
     }
     // Tjek at brugeren faktisk er admin i mindst én organisation

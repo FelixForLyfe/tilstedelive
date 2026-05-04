@@ -1,64 +1,58 @@
-## Sikkerhedshærdning + ny "Sikkerhed"-side
+# Verification & Security Validation Plan
 
-### Del 1 — Sikkerhedshærdning (uændret fra forrige plan)
+A read-only audit pass across the app — no feature changes. Any issue found is fixed in a follow-up after your approval.
 
-Lukker alle aktuelle scanner-fund:
+## 1. Static code & dependency audit
+- Run `bun audit` (or `npm audit`) for known CVEs in dependencies.
+- `rg` for risky patterns: `dangerouslySetInnerHTML`, `eval(`, `Math.random` (security contexts), `process.env` in client code, `supabaseAdmin` imports outside `*.server.ts`.
+- Confirm `src/integrations/supabase/client.server.ts` is never imported from client code.
 
-**Database-migration:**
-- Gør `child-photos` bucket privat; ny RLS der kun tillader org-medlemmer at læse
-- Fjern `anyone can lookup unused codes` og `user can redeem own invite` policies på `organization_invites` (al indløsning går nu via eksisterende `redeem_invite()` SECURITY DEFINER)
-- Fjern `members update child notes` på `children` (daglige noter ligger på `attendance_records`, så personale behøver ikke længere UPDATE-adgang til følsomme børnefelter)
-- Aktivér RLS på `realtime.messages` og scope topic-abonnementer til brugerens organisationer
-- REVOKE EXECUTE på interne SECURITY DEFINER-funktioner (`handle_new_user`, `handle_day_close`, `set_updated_at`) fra `public/anon/authenticated`
+## 2. Database & RLS review
+- `supabase--linter` for misconfigurations.
+- Re-read RLS on every table (children, attendance_records, daily_logs, organization_invites, organization_members, employee_time_logs, profiles) and verify least-privilege.
+- Confirm `SECURITY DEFINER` functions have `search_path = public` and revoked public EXECUTE where appropriate.
+- Verify `child-photos` bucket is private and signed-URL flow still works.
 
-**Kode-ændringer:**
-- `BarnDetalje.tsx` + `app.admin.tsx` + `app.index.tsx`: skift fra `getPublicUrl` til `createSignedUrl(sti, 3600)`; gem storage-sti (ikke URL) i `children.photo_url`
-- `src/server/organization.functions.ts`: zod-validering af input, generisk fejlbesked ved duplikat-email (forhindrer enumeration), detaljeret server-side log
-- `src/routes/app.tsx`: fjern SSR short-circuit i `beforeLoad`; sæt `Cache-Control: no-store, private` på beskyttede ruter
-- Sikre at admin-handlinger (`lukDag`, `genaaben`, rolle-skift, invite-oprettelse) er beskyttet både af RLS og UI-gates (de er allerede dækket af `is_org_admin` policies — verificeres)
+## 3. Server function & route hardening
+- Re-check every `createServerFn` for: Zod input validation, generic error messages (no enumeration), `requireSupabaseAuth` middleware where needed.
+- Check `/api/public/*` routes for signature verification + Zod validation.
+- Confirm no PII in `console.log` / thrown errors.
 
-### Del 2 — Ny "/sikkerhed" landing page
+## 4. Auth flow validation (manual via browser tool)
+- Desktop (1280) + mobile (390) viewports:
+  - Signup (admin + employee invite redemption)
+  - Login / logout
+  - Password reset path exists at `/reset-password`
+  - Session persistence + `onAuthStateChange` listener
+- Verify password min length 8, HIBP check enabled.
 
-**Ny rute:** `src/routes/sikkerhed.tsx`
+## 5. Feature regression smoke tests
+- `/app` status page: filter toggle "kun tilstede", category filter, search, daily-note "X" button next to time.
+- `/app/admin`: child CRUD, photo upload (signed URL), invite code generation (CSPRNG).
+- `/app/logning` (current page): daily logs render correctly.
+- Day-close trigger writes snapshot + auto-checkout still works.
+- Realtime subscription scoped to user's org.
 
-Forklarer på dansk, i et roligt og tillidsvækkende sprog (ikke teknisk jargon for slutbrugeren), hvilken sikkerhed der er integreret. Strukturen:
+## 6. Headers, CORS, CSRF
+- Verify `__root.tsx` SSR sets: HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy.
+- Add CSP header check (currently missing — flag if absent).
+- Confirm server functions are same-origin (no CORS needed); `/api/public/*` uses explicit allowlist.
+- CSRF: TanStack server functions are POST + same-origin + Supabase JWT — confirm no cookie-only auth endpoints exist.
 
-1. **Hero** — "Din institutions data er beskyttet" + kort intro
-2. **Hvad vi beskytter** — børneoplysninger, CPR, lægekontakter, fotos, personale-tider
-3. **Hvordan det fungerer** (4–6 kort med ikoner fra lucide-react):
-   - **Krypteret forbindelse** — TLS i transit, krypteret database
-   - **Adgangskontrol pr. organisation** — Row-Level Security; kun medlemmer af jeres organisation kan se jeres data
-   - **Rolle-baseret rettighedsstyring** — admin vs. personale; følsomme handlinger kræver admin
-   - **Private billeder** — fotos af børn ligger i en privat bucket og hentes med tidsbegrænsede signerede links
-   - **Sikre invitationer** — invite-koder kan kun indløses gennem en valideret server-funktion, ikke listes
-   - **Real-time isolation** — live-opdateringer er scopet til jeres organisation
-4. **OWASP & best practices** — kort sektion: "Vi følger OWASP Top 10 og ASVS-controls" med bullets om input-validering, server-side autorisation, audit-logs
-5. **Daglig drift** — automatisk dag-lukning logger snapshot, daglige noter er pr. dag, arkiv er admin-only
-6. **Kontakt / spørgsmål** — link til support
+## 7. Rate limiting check
+- Inspect server functions for rate limiting on auth-adjacent endpoints (`createOrganizationAdmin`, `redeem_invite`).
+- Flag if missing — Supabase auth has built-in throttling but custom server fns may not.
 
-**Navigation:**
-- Tilføj "Sikkerhed"-link i landing-page headeren (`src/routes/index.tsx` eller fælles header-komponent — vi inspicerer først hvor nav ligger)
-- Footer-link
+## 8. Console, accessibility, responsive
+- `code--read_console_logs` after browser walkthrough — expect 0 errors/warnings (ignore the known `RESET_BLANK_CHECK` from Lovable harness).
+- Tab-order / aria checks on key forms (login, signup, BarnDetalje).
+- Viewport tests at 390 / 768 / 1280.
 
-**Metadata (head()):**
-- title: "Sikkerhed — Tilstede"
-- description: "Sådan beskytter Tilstede jeres institutions data: kryptering, adgangskontrol og GDPR-bevidst design."
-- og:title, og:description, twitter-tags
+## 9. Security scan
+- `security--run_security_scan` for the final report.
+- Triage findings: mark fixed / ignore with justification + update security memory.
 
-**Design:**
-- Bruger eksisterende design-tokens og komponenter (Card, Badge, ikoner)
-- Ingen nye farver eller fonts; følger nuværende landing page stil
-- Responsivt grid for "Hvordan det fungerer"-kortene
+## Deliverable
+A single report listing: pass/fail per section, exact file:line for any finding, and a prioritized remediation list. No code changes in this pass — fixes happen after you approve the report.
 
-### Verifikation
-
-- Kør `security--run_security_scan` igen efter migration
-- Manuel test: personale-konto kan ikke SELECT på invites, ikke UPDATE cpr_number, ikke hente foto uden auth
-- Ny `/sikkerhed`-rute renderer og er linket fra landing page
-
-### Hvad der IKKE ændres
-
-- Eksisterende UI/UX, designsystem, farver, fonts
-- App-funktionalitet (fremmøde, aktiviteter, arkiv, dag-lukning)
-- Eksisterende RLS-politikker på domæne-tabeller (de er korrekte)
-- Routing-struktur for `/app/*`
+Approve to switch to build mode and execute.

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequestIP } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -10,10 +11,45 @@ const createOrganizationSchema = z.object({
 });
 
 const GENERIC_ERR = "Kunne ikke oprette organisationen. Prøv igen eller kontakt support.";
+const RATE_ERR = "For mange forsøg. Prøv igen om lidt.";
+
+// In-memory per-IP rate limit: max 5 signups / 10 min per IP.
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_MAX = 5;
+const ipHits = new Map<string, number[]>();
+
+function checkRate(ip: string): boolean {
+  const now = Date.now();
+  const arr = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (arr.length >= RATE_MAX) {
+    ipHits.set(ip, arr);
+    return false;
+  }
+  arr.push(now);
+  ipHits.set(ip, arr);
+  // Light cleanup
+  if (ipHits.size > 5000) {
+    for (const [k, v] of ipHits) {
+      const fresh = v.filter((t) => now - t < RATE_WINDOW_MS);
+      if (fresh.length === 0) ipHits.delete(k);
+      else ipHits.set(k, fresh);
+    }
+  }
+  return true;
+}
 
 export const createOrganizationAdmin = createServerFn({ method: "POST" })
   .inputValidator((data) => createOrganizationSchema.parse(data))
   .handler(async ({ data }) => {
+    let ip = "unknown";
+    try {
+      ip = getRequestIP({ xForwardedFor: true }) ?? "unknown";
+    } catch {
+      // ignore
+    }
+    if (!checkRate(ip)) {
+      throw new Error(RATE_ERR);
+    }
     try {
       const { data: userResult, error: userError } = await supabaseAdmin.auth.admin.createUser({
         email: data.email,
