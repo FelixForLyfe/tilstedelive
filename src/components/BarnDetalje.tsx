@@ -3,6 +3,10 @@ import { Camera, X, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
+import { useChildPhoto } from "@/lib/childPhoto";
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 
 type Barn = {
   id: string;
@@ -42,21 +46,23 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
     return () => { aktiv = false; };
   }, [barnId, open]);
 
+  const fotoUrl = useChildPhoto(barn?.photo_url);
+
   if (!open) return null;
 
   const uploadFoto = async (fil: File) => {
     if (!barn) return;
+    if (!ALLOWED_PHOTO_TYPES.includes(fil.type)) return toast.error("Filtypen understøttes ikke");
+    if (fil.size > MAX_PHOTO_BYTES) return toast.error("Billedet må højst være 5 MB");
     setUploader(true);
-    const ext = fil.name.split(".").pop()?.toLowerCase() || "jpg";
+    const ext = (fil.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
     const sti = `${barn.organization_id}/${barn.id}-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, fil, { upsert: true, contentType: fil.type });
     if (upErr) { setUploader(false); return toast.error(upErr.message); }
-    const { data: pub } = supabase.storage.from("child-photos").getPublicUrl(sti);
-    const url = pub.publicUrl;
-    const { error: updErr } = await supabase.from("children").update({ photo_url: url }).eq("id", barn.id);
+    const { error: updErr } = await supabase.from("children").update({ photo_url: sti }).eq("id", barn.id);
     setUploader(false);
     if (updErr) return toast.error(updErr.message);
-    setBarn({ ...barn, photo_url: url });
+    setBarn({ ...barn, photo_url: sti });
     toast.success("Billede gemt");
   };
 
@@ -84,8 +90,8 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
             {/* Foto */}
             <div className="flex items-center gap-4">
               <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
-                {barn.photo_url ? (
-                  <img src={barn.photo_url} alt={barn.full_name} className="h-full w-full object-cover" />
+                {barn.photo_url && fotoUrl ? (
+                  <img src={fotoUrl} alt={barn.full_name} className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                     <Camera className="h-8 w-8" />
