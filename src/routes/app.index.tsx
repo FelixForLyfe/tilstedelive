@@ -304,11 +304,12 @@ function Hovedside() {
                     value={f?.leave_time?.slice(0, 5) ?? ""}
                     onChange={(e) => saetHjemsendelse(b, e.target.value)}
                     className="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-xs disabled:opacity-50" />
-                  <button disabled={dagLukket} title="Ukendt tidspunkt"
-                    onClick={() => saetHjemsendelse(b, "X")}
-                    className={`rounded-lg px-2 py-1.5 text-xs font-bold ${f?.leave_time_unspecified ? "bg-warning text-warning-foreground" : "bg-surface hover:bg-surface-elevated"} disabled:opacity-50`}>
-                    X
-                  </button>
+                  <DagligNote
+                    barn={b}
+                    fremmoede={f}
+                    dagLukket={dagLukket}
+                    onGem={(tekst) => gemDagligNote(b, tekst)}
+                  />
                 </div>
               </div>
             );
