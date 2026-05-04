@@ -1,58 +1,36 @@
-# Verification & Security Validation Plan
+## Fix two security findings
 
-A read-only audit pass across the app — no feature changes. Any issue found is fixed in a follow-up after your approval.
+### 1. Server-side MIME + size enforcement on `child-photos` bucket
 
-## 1. Static code & dependency audit
-- Run `bun audit` (or `npm audit`) for known CVEs in dependencies.
-- `rg` for risky patterns: `dangerouslySetInnerHTML`, `eval(`, `Math.random` (security contexts), `process.env` in client code, `supabaseAdmin` imports outside `*.server.ts`.
-- Confirm `src/integrations/supabase/client.server.ts` is never imported from client code.
+Add a migration that sets `allowed_mime_types` and `file_size_limit` on the existing private bucket so Supabase Storage rejects spoofed uploads at the edge — the client checks in `BarnDetalje.tsx` and `app.admin.tsx` stay as UX guards.
 
-## 2. Database & RLS review
-- `supabase--linter` for misconfigurations.
-- Re-read RLS on every table (children, attendance_records, daily_logs, organization_invites, organization_members, employee_time_logs, profiles) and verify least-privilege.
-- Confirm `SECURITY DEFINER` functions have `search_path = public` and revoked public EXECUTE where appropriate.
-- Verify `child-photos` bucket is private and signed-URL flow still works.
+```sql
+UPDATE storage.buckets
+SET allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif'],
+    file_size_limit = 5242880  -- 5 MB
+WHERE id = 'child-photos';
+```
 
-## 3. Server function & route hardening
-- Re-check every `createServerFn` for: Zod input validation, generic error messages (no enumeration), `requireSupabaseAuth` middleware where needed.
-- Check `/api/public/*` routes for signature verification + Zod validation.
-- Confirm no PII in `console.log` / thrown errors.
+No app code changes needed; existing uploads continue to work because they already match these limits.
 
-## 4. Auth flow validation (manual via browser tool)
-- Desktop (1280) + mobile (390) viewports:
-  - Signup (admin + employee invite redemption)
-  - Login / logout
-  - Password reset path exists at `/reset-password`
-  - Session persistence + `onAuthStateChange` listener
-- Verify password min length 8, HIBP check enabled.
+### 2. SECURITY DEFINER functions callable by authenticated
 
-## 5. Feature regression smoke tests
-- `/app` status page: filter toggle "kun tilstede", category filter, search, daily-note "X" button next to time.
-- `/app/admin`: child CRUD, photo upload (signed URL), invite code generation (CSPRNG).
-- `/app/logning` (current page): daily logs render correctly.
-- Day-close trigger writes snapshot + auto-checkout still works.
-- Realtime subscription scoped to user's org.
+Audit of the 7 SECURITY DEFINER functions in the project:
 
-## 6. Headers, CORS, CSRF
-- Verify `__root.tsx` SSR sets: HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy.
-- Add CSP header check (currently missing — flag if absent).
-- Confirm server functions are same-origin (no CORS needed); `/api/public/*` uses explicit allowlist.
-- CSRF: TanStack server functions are POST + same-origin + Supabase JWT — confirm no cookie-only auth endpoints exist.
+| Function | Caller | Action |
+|---|---|---|
+| `handle_new_user`, `handle_day_close`, `set_updated_at` | trigger only | EXECUTE already revoked (prior migration) — re-assert |
+| `is_org_admin`, `is_org_member`, `is_day_closed` | referenced inside RLS policies on `children`, `attendance_records`, etc. | **Must remain executable** by `authenticated` — revoking breaks every RLS policy. Document as accepted risk. |
+| `redeem_invite` | called via `supabase.rpc("redeem_invite", ...)` from `signup.personale.tsx` | **Must remain executable** by `authenticated` — that is the whole point of the invite flow. Already hardened: validates `auth.uid()`, expiry, and single-use. Document as accepted risk. |
 
-## 7. Rate limiting check
-- Inspect server functions for rate limiting on auth-adjacent endpoints (`createOrganizationAdmin`, `redeem_invite`).
-- Flag if missing — Supabase auth has built-in throttling but custom server fns may not.
+Plan:
+- Migration: re-`REVOKE EXECUTE … FROM PUBLIC, anon, authenticated` on the three trigger-only functions (defensive, idempotent).
+- Mark the linter finding as **ignored** with `security--manage_security_finding` and update `@security-memory` explaining that `is_org_*`, `is_day_closed`, and `redeem_invite` are intentionally callable by `authenticated` (RLS helpers cannot be `SECURITY INVOKER` without infinite RLS recursion against `organization_members`; `redeem_invite` is the documented RPC entry point with internal validation).
 
-## 8. Console, accessibility, responsive
-- `code--read_console_logs` after browser walkthrough — expect 0 errors/warnings (ignore the known `RESET_BLANK_CHECK` from Lovable harness).
-- Tab-order / aria checks on key forms (login, signup, BarnDetalje).
-- Viewport tests at 390 / 768 / 1280.
+### Out of scope
+No changes to UI, routing, auth flows, or unrelated tables. No client-side logic change for photo upload (server enforcement is added behind it).
 
-## 9. Security scan
-- `security--run_security_scan` for the final report.
-- Triage findings: mark fixed / ignore with justification + update security memory.
-
-## Deliverable
-A single report listing: pass/fail per section, exact file:line for any finding, and a prioritized remediation list. No code changes in this pass — fixes happen after you approve the report.
-
-Approve to switch to build mode and execute.
+### Files touched
+- `supabase/migrations/<new>.sql` (bucket config + idempotent revokes)
+- `mem://security` / security memory update
+- Security finding marked as ignored with rationale
