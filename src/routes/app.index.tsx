@@ -276,6 +276,10 @@ function Hovedside() {
                       )}
                     </div>
                   </div>
+                  <button onClick={() => setDetaljeId(b.id)} title="Se information"
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-surface-elevated hover:text-foreground">
+                    <InfoIcon className="h-4 w-4" />
+                  </button>
                 </div>
 
                 <div className="mt-3 grid grid-cols-3 gap-1.5">
