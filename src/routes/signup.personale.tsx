@@ -115,7 +115,7 @@ function PersonaleSignup() {
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <PasswordInput required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
+              <PasswordInput required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
             </div>
             <button type="submit" disabled={loading}
               className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">
