@@ -208,7 +208,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
       } else {
         const ext = (foto.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
         const sti = `${orgId}/${data.id}-${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, foto, { upsert: true, contentType: foto.type });
+        const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, foto, { upsert: false, contentType: foto.type });
         if (!upErr) {
           await supabase.from("children").update({ photo_url: sti }).eq("id", data.id);
           data.photo_url = sti;
