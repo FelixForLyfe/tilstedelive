@@ -5,6 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
+import { useChildPhoto } from "@/lib/childPhoto";
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 
 export const Route = createFileRoute("/app/admin")({
   component: AdminSide,
@@ -197,15 +201,20 @@ function BoernPanel({ orgId }: { orgId: string }) {
     if (error) { setUploader(false); toast.error(error.message); return; }
 
     if (foto && data) {
-      const ext = foto.name.split(".").pop()?.toLowerCase() || "jpg";
-      const sti = `${orgId}/${data.id}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, foto, { upsert: true, contentType: foto.type });
-      if (!upErr) {
-        const { data: pub } = supabase.storage.from("child-photos").getPublicUrl(sti);
-        await supabase.from("children").update({ photo_url: pub.publicUrl }).eq("id", data.id);
-        data.photo_url = pub.publicUrl;
+      if (!ALLOWED_PHOTO_TYPES.includes(foto.type)) {
+        toast.error("Filtypen understøttes ikke");
+      } else if (foto.size > MAX_PHOTO_BYTES) {
+        toast.error("Billedet må højst være 5 MB");
       } else {
-        toast.error("Billede kunne ikke uploades: " + upErr.message);
+        const ext = (foto.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const sti = `${orgId}/${data.id}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("child-photos").upload(sti, foto, { upsert: true, contentType: foto.type });
+        if (!upErr) {
+          await supabase.from("children").update({ photo_url: sti }).eq("id", data.id);
+          data.photo_url = sti;
+        } else {
+          toast.error("Billede kunne ikke uploades: " + upErr.message);
+        }
       }
     }
 
@@ -301,20 +310,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
 
       <div className="grid gap-2">
         {list.map((b) => (
-          <div key={b.id} className="glass flex items-center justify-between rounded-xl p-3">
-            <button onClick={() => setDetaljeId(b.id)} className="flex flex-1 items-center gap-3 text-left">
-              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface ring-1 ring-border">
-                {b.photo_url ? <img src={b.photo_url} alt="" className="h-full w-full object-cover" /> : null}
-              </div>
-              <div>
-                <p className="font-semibold">{b.full_name}</p>
-                <p className="text-xs text-muted-foreground">{b.categories?.name ?? "Ingen kategori"}</p>
-              </div>
-            </button>
-            <button onClick={() => slet(b.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
+          <BarnRaekke key={b.id} barn={b} onOpen={() => setDetaljeId(b.id)} onSlet={() => slet(b.id)} />
         ))}
         {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen børn endnu.</p>}
       </div>
