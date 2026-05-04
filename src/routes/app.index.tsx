@@ -314,6 +314,7 @@ function Hovedside() {
           })}
         </div>
       )}
+      <BarnDetalje barnId={detaljeId} open={!!detaljeId} onClose={() => setDetaljeId(null)} />
     </div>
   );
 }
