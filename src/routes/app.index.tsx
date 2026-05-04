@@ -33,7 +33,7 @@ function Hovedside() {
   const [soegning, setSoegning] = useState("");
   const [dagLukket, setDagLukket] = useState(false);
   const [notiTilladt, setNotiTilladt] = useState<NotificationPermission>("default");
-  const [redigerBarn, setRedigerBarn] = useState<Barn | null>(null);
+  const [detaljeId, setDetaljeId] = useState<string | null>(null);
   const allerede = useRef<Set<string>>(new Set());
 
   useEffect(() => {
