@@ -335,3 +335,47 @@ function Hovedside() {
     </div>
   );
 }
+
+function DagligNote({ barn, fremmoede, dagLukket, onGem }: {
+  barn: Barn;
+  fremmoede: Fremmoede | undefined;
+  dagLukket: boolean;
+  onGem: (tekst: string) => void | Promise<void>;
+}) {
+  const [aaben, setAaben] = useState(false);
+  const [tekst, setTekst] = useState(fremmoede?.daily_note ?? "");
+  useEffect(() => { setTekst(fremmoede?.daily_note ?? ""); }, [fremmoede?.daily_note]);
+  const harNote = !!fremmoede?.daily_note;
+
+  return (
+    <>
+      <button disabled={dagLukket} title="Dagens note"
+        onClick={() => setAaben(true)}
+        className={`relative rounded-lg px-2 py-1.5 text-xs font-bold ${harNote ? "bg-warning text-warning-foreground" : "bg-surface hover:bg-surface-elevated"} disabled:opacity-50`}>
+        <StickyNote className="h-3.5 w-3.5" />
+        {harNote && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-warning ring-2 ring-background" />}
+      </button>
+      {aaben && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAaben(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+            className="glass w-full max-w-md space-y-3 rounded-t-3xl p-5 sm:rounded-3xl">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Dagens note</p>
+              <h3 className="font-display text-lg font-semibold">{barn.full_name}</h3>
+            </div>
+            <textarea value={tekst} onChange={(e) => setTekst(e.target.value)} rows={4}
+              autoFocus
+              placeholder="Fx besked fra forælder, særlig info for i dag…"
+              className="w-full rounded-xl border border-input bg-background p-3 text-sm" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setAaben(false)}
+                className="rounded-xl bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-elevated">Annullér</button>
+              <button onClick={async () => { await onGem(tekst); setAaben(false); }}
+                className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Gem note</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
