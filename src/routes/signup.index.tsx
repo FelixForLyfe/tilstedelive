@@ -101,7 +101,7 @@ function SignupSide() {
               <label className="text-sm font-medium">Adgangskode</label>
               <PasswordInput
                 required
-                minLength={6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1"

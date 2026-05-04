@@ -34,6 +34,7 @@ function Forside() {
           <span className="font-display text-xl font-bold tracking-tight">Tilstede</span>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link to="/sikkerhed" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Sikkerhed</Link>
           <Link to="/login/personale" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Personale</Link>
           <Link to="/login/admin" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Admin</Link>
           <Link to="/signup" className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90">Opret organisation</Link>
@@ -71,6 +72,8 @@ function Forside() {
       </section>
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
+        <Link to="/sikkerhed" className="underline-offset-4 hover:underline">Sikkerhed</Link>
+        <span className="mx-2">·</span>
         Tilstede © {new Date().getFullYear()} – bygget til danske institutioner.
       </footer>
     </div>
