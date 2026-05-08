@@ -87,9 +87,15 @@ query on organizations
 
 ### Why redeem_invite stays in public
 
-`redeem_invite` is **intentionally callable** by authenticated users via the REST API — it is the invite redemption endpoint. It must remain `SECURITY DEFINER` because it performs an atomic `UPDATE` (mark invite used) followed by an `INSERT` (add org member). A `SECURITY INVOKER` version fails at the membership insert step because the user's SELECT policy on `organization_invites` no longer shows the invite once it is marked as consumed, causing the membership policy's `EXISTS` check to return false.
+`redeem_invite` is **intentionally callable** by authenticated users via the REST API — it is the invite redemption endpoint. It runs as **SECURITY INVOKER** (migration `20260509130000`), meaning it executes with the caller's privileges and is subject to RLS.
 
-The function validates the invite code itself (checks `used_at IS NULL` and `expires_at > now()`) before doing any writes, so `SECURITY DEFINER` is safe here.
+Three supporting RLS policies make this work:
+
+1. **`user can claim unused invite`** (UPDATE on `organization_invites`) — lets the caller atomically mark an unused, unexpired invite as theirs via `UPDATE ... RETURNING`.
+2. **`users see own redeemed invites`** (SELECT on `organization_invites`) — lets the caller see the invite they just consumed (`used_by = auth.uid()`), which is required for the next step.
+3. **`users can join org through redeemed invite`** (INSERT on `organization_members`) — lets the caller insert themselves, gated by an `EXISTS` check that the invite was redeemed within the last 10 minutes.
+
+The function uses `UPDATE ... RETURNING` for a race-safe atomic claim: if two concurrent calls arrive for the same code, only one UPDATE matches (the `used_at IS NULL` guard), and the losing call gets NULL back and raises an exception.
 
 ---
 
@@ -119,6 +125,7 @@ The function validates the invite code itself (checks `used_at IS NULL` and `exp
 | members see members of their orgs | SELECT | authenticated | `is_org_member(uid, org_id)` OR `user_id = auth.uid()` |
 | creator can self-add as admin | INSERT | authenticated | `user_id = uid` AND `role = admin` AND user created the org |
 | admins add members | INSERT | authenticated | `is_org_admin(uid, org_id)` |
+| users can join org through redeemed invite | INSERT | authenticated | `user_id = auth.uid()` AND `status = active` AND EXISTS redeemed invite within last 10 minutes |
 | admins update members | UPDATE | authenticated | `is_org_admin(uid, org_id)` |
 | admins remove members | DELETE | authenticated | `is_org_admin(uid, org_id)` |
 
@@ -128,8 +135,10 @@ The function validates the invite code itself (checks `used_at IS NULL` and `exp
 |--------|-----------|-----|-----------|
 | admins manage invites | ALL | authenticated | `is_org_admin(uid, org_id)` |
 | authenticated can view redeemable invite | SELECT | authenticated | `used_at IS NULL AND expires_at > now()` |
+| users see own redeemed invites | SELECT | authenticated | `used_by = auth.uid()` |
+| user can claim unused invite | UPDATE | authenticated | USING: `used_at IS NULL AND expires_at > now()` / WITH CHECK: `used_by = auth.uid() AND used_at IS NOT NULL` |
 
-Invite redemption is handled exclusively by `public.redeem_invite()`. Users call that function via `/rest/v1/rpc/redeem_invite` — they do not write to this table directly.
+The last two policies were added by migration `20260509130000` to support the SECURITY INVOKER `redeem_invite` function. Users cannot INSERT or DELETE invites directly; only admins can do that via the `admins manage invites` policy.
 
 ### `public.categories`
 
