@@ -250,7 +250,15 @@ New staff members cannot self-register. The flow is:
 2. Admin shares the code with the new employee out-of-band.
 3. Employee visits `/signup/personale`, creates an account with email + password.
 4. After signup, the app calls `POST /rest/v1/rpc/redeem_invite` with the code.
-5. `redeem_invite()` (SECURITY DEFINER) validates the code, marks it as used, and inserts the user into `organization_members` with the role specified on the invite.
+5. `redeem_invite()` atomically claims the invite with `UPDATE ... RETURNING` and inserts the user into `organization_members`.
+
+The function is **SECURITY INVOKER** — it runs with the caller's privileges and is backed by three RLS policies:
+
+| Policy | Table | Purpose |
+|--------|-------|---------|
+| `user can claim unused invite` | `organization_invites` | Allows the UPDATE that marks the invite as used |
+| `users see own redeemed invites` | `organization_invites` | Lets the user SELECT their just-consumed invite (needed for the next check) |
+| `users can join org through redeemed invite` | `organization_members` | Allows the INSERT, verified by EXISTS on the redeemed invite |
 
 The entire redemption is a single atomic database function — no partial states are possible.
 
@@ -323,13 +331,9 @@ This checks new passwords against the [HaveIBeenPwned](https://haveibeenpwned.co
 
 This cannot be enabled via a SQL migration; it must be set in the dashboard or via the Supabase Management API.
 
-### redeem_invite linter warning (accepted risk)
+### redeem_invite
 
-The Supabase linter reports:
-
-> `public.redeem_invite(_code text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/redeem_invite`.
-
-This is **intentional and accepted**. The function is the invite redemption endpoint. It is callable by authenticated users by design. The `SECURITY DEFINER` attribute is required for the atomic invite update + membership insert to work correctly (see [Section 2](#2-private-schema-helper-functions)). The function validates the invite code, user authentication, and expiry before performing any writes.
+`redeem_invite` is now **SECURITY INVOKER** (migration `20260509130000`). The linter warning for this function is resolved. It is backed by three RLS policies that together enforce the invite redemption flow without requiring elevated privileges (see [Section 4](#4-authentication--invite-flow)).
 
 ### CPR number encryption (recommended)
 
@@ -403,7 +407,7 @@ After applying, go to:
 The following warnings should be resolved:
 - ✅ `rls_auto_enable` — dropped
 - ✅ `is_org_member`, `is_org_admin`, `is_day_closed` — moved to private schema, no longer in linter scope
-- ⚠️ `redeem_invite` — will still appear; this is accepted (see Section 6)
+- ✅ `redeem_invite` — converted to SECURITY INVOKER (migration `20260509130000`)
 - ⚠️ `auth_leaked_password_protection` — requires dashboard toggle (see Section 6)
 
 ### Migration history
@@ -428,4 +432,5 @@ The following warnings should be resolved:
 | `20260504174934_*` | (empty) |
 | `20260504181639_*` | Set child-photos MIME type and size limits |
 | `20260508215000_rls_hardening_phase1` | Draft hardening — superseded by phase 2 |
-| **`20260509120000_rls_hardening_phase2`** | **Current: private schema helpers, full policy rebuild, storage policies restored** |
+| `20260509120000_rls_hardening_phase2` | Private schema helpers, full policy rebuild, storage policies restored |
+| **`20260509130000_redeem_invite_security_invoker`** | **Convert redeem_invite to SECURITY INVOKER with supporting RLS policies** |
