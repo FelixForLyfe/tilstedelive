@@ -47,8 +47,8 @@ export const Route = createRootRoute({
       { name: "apple-mobile-web-app-title", content: "Tilstede" },
       { name: "twitter:title", content: "Tilstede" },
       { name: "twitter:description", content: "Tilstede er en dansk webapp til fremmøderegistrering, hjemsendelser, aktiviteter og arbejdstid for skoler, SFO'er og klubber." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3b9040b0-80ab-4366-ab7b-3fd5ff7ad74e/id-preview-3d34de21--a25c02dd-c9a0-4a33-a0d2-56e709d6ec64.lovable.app-1777632399826.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3b9040b0-80ab-4366-ab7b-3fd5ff7ad74e/id-preview-3d34de21--a25c02dd-c9a0-4a33-a0d2-56e709d6ec64.lovable.app-1777632399826.png" },
+      { property: "og:image", content: "/app-icon-512.png" },
+      { name: "twitter:image", content: "/app-icon-512.png" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [

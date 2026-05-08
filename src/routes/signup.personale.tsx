@@ -59,7 +59,7 @@ function PersonaleSignup() {
       return;
     }
 
-    // 3) Indløs kode (server-funktionen tjekker selv gyldighed)
+    // 3) Indløs kode via RLS-safe RPC (no privileged bypass)
     const { error: redeemErr } = await supabase.rpc("redeem_invite", { _code: renKode });
     setLoading(false);
     if (redeemErr) {
