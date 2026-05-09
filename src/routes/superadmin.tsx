@@ -37,6 +37,11 @@ import {
   ToggleLeft,
   ToggleRight,
   Settings2,
+  Megaphone,
+  BookOpen,
+  Eye,
+  EyeOff,
+  Radio,
 } from "lucide-react";
 import {
   BarChart,
@@ -75,6 +80,10 @@ import {
   superadminUpdateGdprRequest,
   superadminGetOpsData,
   superadminSetAppSetting,
+  superadminGetCommsData,
+  superadminSaveAnnouncement,
+  superadminToggleAnnouncement,
+  superadminSaveChangelogEntry,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
@@ -84,6 +93,8 @@ import {
   type AuthSecuritySummary,
   type DbTableStat,
   type AppSetting,
+  type Announcement,
+  type ChangelogEntry,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -206,6 +217,11 @@ const EVENT_LABELS: Record<string, string> = {
   SUPERADMIN_CREATE_GDPR_REQUEST: "Oprettede GDPR-anmodning",
   SUPERADMIN_UPDATE_GDPR_REQUEST: "Opdaterede GDPR-anmodning",
   SUPERADMIN_SET_APP_SETTING: "Opdaterede app-indstilling",
+  SUPERADMIN_CREATE_ANNOUNCEMENT: "Oprettede meddelelse",
+  SUPERADMIN_UPDATE_ANNOUNCEMENT: "Opdaterede meddelelse",
+  SUPERADMIN_TOGGLE_ANNOUNCEMENT: "Skiftede meddelelse aktiv/inaktiv",
+  SUPERADMIN_CREATE_CHANGELOG: "Oprettede changelog-post",
+  SUPERADMIN_UPDATE_CHANGELOG: "Opdaterede changelog-post",
 };
 
 const CUSTOM_PLAN_STATUS_LABELS: Record<string, string> = {
@@ -229,6 +245,7 @@ const TABS = [
   { id: "misc", label: "Misc. Planer", icon: Layers },
   { id: "sikkerhed", label: "Sikkerhed", icon: ShieldAlert },
   { id: "drift", label: "Drift", icon: Server },
+  { id: "komm", label: "Kommunikation", icon: Megaphone },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -353,6 +370,7 @@ function SuperadminPanel() {
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
         {activeTab === "sikkerhed" && <SecurityTab accessToken={accessToken} />}
         {activeTab === "drift" && <DriftTab accessToken={accessToken} />}
+        {activeTab === "komm" && <KommunikationTab accessToken={accessToken} />}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -3213,6 +3231,595 @@ function DriftTab({ accessToken }: { accessToken: string }) {
           Rækkeantal er approksimativt (pg_class.reltuples) — ingen tabelindhold eksponeres
         </p>
       </section>
+    </div>
+  );
+}
+
+// ─── Kommunikation tab ───────────────────────────────────────────────────────
+
+const ANN_TYPE_CFG: Record<string, { label: string; cls: string; dot: string }> = {
+  info:        { label: "Info",        cls: "bg-primary/15 text-primary",         dot: "bg-primary" },
+  warning:     { label: "Advarsel",    cls: "bg-warning/15 text-warning",          dot: "bg-warning" },
+  maintenance: { label: "Vedligehold", cls: "bg-orange-500/15 text-orange-600",    dot: "bg-orange-500" },
+};
+
+function KommunikationTab({ accessToken }: { accessToken: string }) {
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [annModal, setAnnModal] = useState<Announcement | null | "new">(null);
+  const [clModal, setClModal] = useState<ChangelogEntry | null | "new">(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await superadminGetCommsData({ data: { accessToken } });
+      const r = result as { announcements: Announcement[]; changelog: ChangelogEntry[] };
+      setAnnouncements(r.announcements);
+      setChangelog(r.changelog);
+    } catch {
+      toast.error("Kunne ikke indlæse kommunikationsdata");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleAnnouncement = async (ann: Announcement) => {
+    setTogglingId(ann.id);
+    try {
+      await superadminToggleAnnouncement({
+        data: { accessToken, id: ann.id, isActive: !ann.is_active },
+      });
+      toast.success(ann.is_active ? "Meddelelse deaktiveret" : "Meddelelse aktiveret");
+      load();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke skifte status");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const activeAnn = announcements.filter((a) => a.is_active);
+  const publishedCl = changelog.filter((c) => c.is_published);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Indlæser kommunikationsdata…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Kommunikation</h2>
+          <p className="text-sm text-muted-foreground">
+            {activeAnn.length} aktive meddelelse{activeAnn.length !== 1 ? "r" : ""} ·{" "}
+            {publishedCl.length} publiseret{publishedCl.length !== 1 ? "e" : ""} changelog-post{publishedCl.length !== 1 ? "er" : ""}
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+        >
+          <RefreshCw className="h-4 w-4" /> Opdater
+        </button>
+      </div>
+
+      {/* ── Announcements ── */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-base font-semibold">
+              <Radio className="mr-1.5 inline h-4 w-4" />
+              Systemmeddelelser
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Vises til brugere som et banner i appen
+            </p>
+          </div>
+          <button
+            onClick={() => setAnnModal("new")}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
+            <Plus className="h-4 w-4" /> Ny meddelelse
+          </button>
+        </div>
+
+        {announcements.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-8 text-center text-muted-foreground">
+            <Megaphone className="mx-auto mb-3 h-8 w-8 opacity-30" />
+            {loading
+              ? "Indlæser…"
+              : "Ingen meddelelser endnu — klik \"Ny meddelelse\" for at oprette den første"}
+          </div>
+        ) : (
+          <div className="glass overflow-hidden rounded-2xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-left">Titel</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Målgruppe</th>
+                  <th className="px-4 py-3 text-left">Periode</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {announcements.map((ann, i) => {
+                  const cfg = ANN_TYPE_CFG[ann.type] ?? ANN_TYPE_CFG.info;
+                  const now = Date.now();
+                  const started = new Date(ann.starts_at).getTime() <= now;
+                  const ended = ann.ends_at ? new Date(ann.ends_at).getTime() < now : false;
+                  const live = ann.is_active && started && !ended;
+                  return (
+                    <tr
+                      key={ann.id}
+                      className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""}`}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{ann.title}</p>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{ann.body}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.cls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                          {cfg.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {ann.target === "all"
+                          ? "Alle brugere"
+                          : ann.org_name ?? "Specifik org"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <div>{fmtDato(ann.starts_at)}</div>
+                        {ann.ends_at && <div>→ {fmtDato(ann.ends_at)}</div>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          live
+                            ? "bg-success/15 text-success"
+                            : ended
+                            ? "bg-muted text-muted-foreground"
+                            : "bg-surface text-muted-foreground"
+                        }`}>
+                          {live ? "Live" : ended ? "Udløbet" : ann.is_active ? "Planlagt" : "Inaktiv"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => toggleAnnouncement(ann)}
+                            disabled={togglingId === ann.id}
+                            title={ann.is_active ? "Deaktivér" : "Aktivér"}
+                            className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          >
+                            {ann.is_active
+                              ? <EyeOff className="h-4 w-4" />
+                              : <Eye className="h-4 w-4" />}
+                          </button>
+                          <button
+                            onClick={() => setAnnModal(ann)}
+                            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated"
+                          >
+                            Rediger
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── Changelog ── */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-base font-semibold">
+              <BookOpen className="mr-1.5 inline h-4 w-4" />
+              Changelog
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Produktopdateringer synlige for brugere
+            </p>
+          </div>
+          <button
+            onClick={() => setClModal("new")}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
+            <Plus className="h-4 w-4" /> Ny post
+          </button>
+        </div>
+
+        {changelog.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-8 text-center text-muted-foreground">
+            <BookOpen className="mx-auto mb-3 h-8 w-8 opacity-30" />
+            Ingen changelog-poster endnu
+          </div>
+        ) : (
+          <div className="glass overflow-hidden rounded-2xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-left">Version</th>
+                  <th className="px-4 py-3 text-left">Titel</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Publiseret</th>
+                  <th className="px-4 py-3 text-left">Oprettet</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {changelog.map((cl, i) => (
+                  <tr
+                    key={cl.id}
+                    className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""}`}
+                  >
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-xs font-semibold text-primary">
+                        v{cl.version}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{cl.title}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{cl.body}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        cl.is_published ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {cl.is_published ? "Publiseret" : "Kladde"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {cl.published_at ? fmtDato(cl.published_at) : "–"}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {fmtDato(cl.created_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setClModal(cl)}
+                        className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated"
+                      >
+                        Rediger
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Modals */}
+      {annModal !== null && (
+        <AnnouncementModal
+          accessToken={accessToken}
+          announcement={annModal === "new" ? undefined : annModal}
+          onClose={() => setAnnModal(null)}
+          onSaved={() => { setAnnModal(null); load(); }}
+        />
+      )}
+      {clModal !== null && (
+        <ChangelogModal
+          accessToken={accessToken}
+          entry={clModal === "new" ? undefined : clModal}
+          onClose={() => setClModal(null)}
+          onSaved={() => { setClModal(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Announcement modal ───────────────────────────────────────────────────────
+
+function AnnouncementModal({
+  accessToken,
+  announcement,
+  onClose,
+  onSaved,
+}: {
+  accessToken: string;
+  announcement?: Announcement;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!announcement;
+  const [orgNames, setOrgNames] = useState<{ id: string; name: string }[]>([]);
+  const [title, setTitle]       = useState(announcement?.title ?? "");
+  const [body, setBody]         = useState(announcement?.body ?? "");
+  const [type, setType]         = useState(announcement?.type ?? "info");
+  const [target, setTarget]     = useState(announcement?.target ?? "all");
+  const [orgId, setOrgId]       = useState(announcement?.org_id ?? "");
+  const [startsAt, setStartsAt] = useState(
+    announcement?.starts_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+  );
+  const [endsAt, setEndsAt]     = useState(announcement?.ends_at?.slice(0, 10) ?? "");
+  const [isActive, setIsActive] = useState(announcement?.is_active ?? true);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    if (target === "org") {
+      superadminListOrgNames({ data: { accessToken } })
+        .then((d) => {
+          setOrgNames(d as { id: string; name: string }[]);
+          if (!orgId && d.length > 0) setOrgId((d[0] as any).id);
+        })
+        .catch(() => {});
+    }
+  }, [accessToken, target, orgId]);
+
+  const canSave = title.trim().length >= 1 && body.trim().length >= 1;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      await superadminSaveAnnouncement({
+        data: {
+          accessToken,
+          id: announcement?.id,
+          title: title.trim(),
+          body: body.trim(),
+          type: type as any,
+          target: target as any,
+          orgId: target === "org" ? orgId || undefined : undefined,
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
+          isActive,
+        },
+      });
+      toast.success(isEdit ? "Meddelelse opdateret" : "Meddelelse oprettet");
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme meddelelse");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="glass w-full max-w-lg space-y-4 rounded-t-3xl p-5 sm:rounded-3xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {isEdit ? "Rediger" : "Ny"} systemmeddelelse
+            </p>
+            <h3 className="font-display text-lg font-bold">
+              {isEdit ? announcement!.title : "Opret meddelelse"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titel <span className="text-destructive">*</span></label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={200}
+              placeholder="Fx: Planlagt vedligehold søndag d. 11. maj kl. 02–04"
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Besked <span className="text-destructive">*</span></label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              placeholder="Kortfattet besked til brugerne…"
+              className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none"
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">{body.length}/1000</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Type</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none">
+                <option value="info">Info</option>
+                <option value="warning">Advarsel</option>
+                <option value="maintenance">Vedligehold</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Målgruppe</label>
+              <select value={target} onChange={(e) => setTarget(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none">
+                <option value="all">Alle brugere</option>
+                <option value="org">Specifik organisation</option>
+              </select>
+            </div>
+          </div>
+
+          {target === "org" && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Organisation</label>
+              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none">
+                {orgNames.length === 0 && <option value="">Indlæser…</option>}
+                {orgNames.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Startdato <span className="text-destructive">*</span></label>
+              <input type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Slutdato (valgfri)</label>
+              <input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none" />
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-3">
+            <div
+              onClick={() => setIsActive((v) => !v)}
+              className={`relative h-6 w-11 rounded-full transition ${isActive ? "bg-success" : "bg-muted"}`}
+            >
+              <div className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${isActive ? "left-5" : "left-0.5"}`} />
+            </div>
+            <span className="text-sm font-medium">{isActive ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-border bg-surface py-2 text-sm font-medium hover:bg-surface-elevated">Annullér</button>
+          <button onClick={handleSave} disabled={saving || !canSave} className="flex-1 rounded-xl bg-gradient-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+            {saving ? "Gemmer…" : isEdit ? "Gem ændringer" : "Opret meddelelse"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Changelog modal ──────────────────────────────────────────────────────────
+
+function ChangelogModal({
+  accessToken,
+  entry,
+  onClose,
+  onSaved,
+}: {
+  accessToken: string;
+  entry?: ChangelogEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!entry;
+  const [version, setVersion]         = useState(entry?.version ?? "");
+  const [title, setTitle]             = useState(entry?.title ?? "");
+  const [body, setBody]               = useState(entry?.body ?? "");
+  const [isPublished, setIsPublished] = useState(entry?.is_published ?? false);
+  const [saving, setSaving]           = useState(false);
+
+  const canSave = version.trim().length >= 1 && title.trim().length >= 1 && body.trim().length >= 1;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      await superadminSaveChangelogEntry({
+        data: {
+          accessToken,
+          id: entry?.id,
+          version: version.trim(),
+          title: title.trim(),
+          body: body.trim(),
+          isPublished,
+        },
+      });
+      toast.success(isEdit ? "Changelog-post opdateret" : "Changelog-post oprettet");
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme changelog-post");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="glass w-full max-w-lg space-y-4 rounded-t-3xl p-5 sm:rounded-3xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {isEdit ? "Rediger" : "Ny"} changelog-post
+            </p>
+            <h3 className="font-display text-lg font-bold">
+              {isEdit ? `v${entry!.version} — ${entry!.title}` : "Opret ny post"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Version <span className="text-destructive">*</span></label>
+              <input
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                maxLength={50}
+                placeholder="1.4.0"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titel <span className="text-destructive">*</span></label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={200}
+                placeholder="Fx: Ny aktivitetsvisning og bugfixes"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Indhold <span className="text-destructive">*</span></label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={8}
+              maxLength={5000}
+              placeholder={"• Ny aktivitetskalender\n• Forbedret søgning\n• Rettet fejl i fremmøde-export\n• Ydeevneforbedringer"}
+              className="w-full rounded-xl border border-input bg-background p-3 font-mono text-sm focus:border-ring focus:outline-none"
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground">{body.length}/5000</p>
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-3">
+            <div
+              onClick={() => setIsPublished((v) => !v)}
+              className={`relative h-6 w-11 rounded-full transition ${isPublished ? "bg-success" : "bg-muted"}`}
+            >
+              <div className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${isPublished ? "left-5" : "left-0.5"}`} />
+            </div>
+            <span className="text-sm font-medium">
+              {isPublished ? "Publiseret (synlig for brugere)" : "Kladde (ikke synlig)"}
+            </span>
+          </label>
+          {!entry?.is_published && isPublished && (
+            <p className="text-xs text-success">
+              Publiseringstidspunkt sættes til nu ved gem.
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-border bg-surface py-2 text-sm font-medium hover:bg-surface-elevated">Annullér</button>
+          <button onClick={handleSave} disabled={saving || !canSave} className="flex-1 rounded-xl bg-gradient-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+            {saving ? "Gemmer…" : isEdit ? "Gem ændringer" : "Opret post"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1112,6 +1112,211 @@ export const superadminSetAppSetting = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+// ─── Communications ──────────────────────────────────────────────────────────
+
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  target: string;
+  org_id: string | null;
+  org_name: string | null;
+  is_active: boolean;
+  starts_at: string;
+  ends_at: string | null;
+  created_at: string;
+};
+
+export type ChangelogEntry = {
+  id: string;
+  version: string;
+  title: string;
+  body: string;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+};
+
+const ANNOUNCEMENT_TYPES = ["info", "warning", "maintenance"] as const;
+const ANNOUNCEMENT_TARGETS = ["all", "org"] as const;
+
+export const superadminGetCommsData = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const [annRes, clRes] = await Promise.all([
+      (supabaseAdmin as any)
+        .from("announcements")
+        .select("id, title, body, type, target, org_id, is_active, starts_at, ends_at, created_at, organizations(name)")
+        .order("created_at", { ascending: false })
+        .then((r: any) => r)
+        .catch(() => ({ data: [] })),
+
+      (supabaseAdmin as any)
+        .from("changelog")
+        .select("id, version, title, body, is_published, published_at, created_at")
+        .order("created_at", { ascending: false })
+        .then((r: any) => r)
+        .catch(() => ({ data: [] })),
+    ]);
+
+    const announcements: Announcement[] = (annRes.data ?? []).map((a: any) => ({
+      id: a.id as string,
+      title: a.title as string,
+      body: a.body as string,
+      type: a.type as string,
+      target: a.target as string,
+      org_id: (a.org_id ?? null) as string | null,
+      org_name: (a.organizations?.name ?? null) as string | null,
+      is_active: a.is_active as boolean,
+      starts_at: a.starts_at as string,
+      ends_at: (a.ends_at ?? null) as string | null,
+      created_at: a.created_at as string,
+    }));
+
+    const changelog: ChangelogEntry[] = (clRes.data ?? []).map((c: any) => ({
+      id: c.id as string,
+      version: c.version as string,
+      title: c.title as string,
+      body: c.body as string,
+      is_published: c.is_published as boolean,
+      published_at: (c.published_at ?? null) as string | null,
+      created_at: c.created_at as string,
+    }));
+
+    return { announcements, changelog };
+  });
+
+export const superadminSaveAnnouncement = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        id: z.string().uuid().optional(),
+        title: z.string().trim().min(1, "Titel er påkrævet").max(200),
+        body: z.string().trim().min(1, "Besked er påkrævet").max(1000),
+        type: z.enum(ANNOUNCEMENT_TYPES),
+        target: z.enum(ANNOUNCEMENT_TARGETS),
+        orgId: z.string().uuid().optional(),
+        startsAt: z.string().min(1),
+        endsAt: z.string().nullable().optional(),
+        isActive: z.boolean().default(true),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const row = {
+      title: data.title,
+      body: data.body,
+      type: data.type,
+      target: data.target,
+      org_id: data.target === "org" ? (data.orgId ?? null) : null,
+      is_active: data.isActive,
+      starts_at: data.startsAt,
+      ends_at: data.endsAt ?? null,
+    };
+
+    if (data.id) {
+      const { error } = await (supabaseAdmin as any)
+        .from("announcements")
+        .update(row)
+        .eq("id", data.id);
+      if (error) throw new Error(error.message);
+      await auditLog(admin.id, "SUPERADMIN_UPDATE_ANNOUNCEMENT", data.orgId ?? null, { id: data.id });
+    } else {
+      const { error } = await (supabaseAdmin as any)
+        .from("announcements")
+        .insert({ ...row, created_by: admin.id });
+      if (error && isMissingTable(error)) {
+        throw new Error("announcements-tabellen eksisterer ikke endnu. Kør migration 20260509290000.");
+      }
+      if (error) throw new Error(error.message);
+      await auditLog(admin.id, "SUPERADMIN_CREATE_ANNOUNCEMENT", data.orgId ?? null, { type: data.type, target: data.target });
+    }
+
+    return { success: true };
+  });
+
+export const superadminToggleAnnouncement = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z.object({ accessToken: z.string().min(1), id: z.string().uuid(), isActive: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+    const { error } = await (supabaseAdmin as any)
+      .from("announcements")
+      .update({ is_active: data.isActive })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await auditLog(admin.id, "SUPERADMIN_TOGGLE_ANNOUNCEMENT", null, { id: data.id, is_active: data.isActive });
+    return { success: true };
+  });
+
+export const superadminSaveChangelogEntry = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        id: z.string().uuid().optional(),
+        version: z.string().trim().min(1, "Version er påkrævet").max(50),
+        title: z.string().trim().min(1, "Titel er påkrævet").max(200),
+        body: z.string().trim().min(1, "Indhold er påkrævet").max(5000),
+        isPublished: z.boolean().default(false),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const now = new Date().toISOString();
+
+    if (data.id) {
+      // Fetch current published state to know if we're publishing for the first time
+      const { data: existing } = await (supabaseAdmin as any)
+        .from("changelog")
+        .select("is_published, published_at")
+        .eq("id", data.id)
+        .single();
+
+      const firstPublish = data.isPublished && !existing?.is_published;
+
+      const { error } = await (supabaseAdmin as any)
+        .from("changelog")
+        .update({
+          version: data.version,
+          title: data.title,
+          body: data.body,
+          is_published: data.isPublished,
+          ...(firstPublish ? { published_at: now } : {}),
+        })
+        .eq("id", data.id);
+      if (error) throw new Error(error.message);
+      await auditLog(admin.id, "SUPERADMIN_UPDATE_CHANGELOG", null, { id: data.id, version: data.version });
+    } else {
+      const { error } = await (supabaseAdmin as any)
+        .from("changelog")
+        .insert({
+          version: data.version,
+          title: data.title,
+          body: data.body,
+          is_published: data.isPublished,
+          published_at: data.isPublished ? now : null,
+          created_by: admin.id,
+        });
+      if (error && isMissingTable(error)) {
+        throw new Error("changelog-tabellen eksisterer ikke endnu. Kør migration 20260509290000.");
+      }
+      if (error) throw new Error(error.message);
+      await auditLog(admin.id, "SUPERADMIN_CREATE_CHANGELOG", null, { version: data.version });
+    }
+
+    return { success: true };
+  });
+
 // ─── Update custom plan ───────────────────────────────────────────────────────
 
 export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
