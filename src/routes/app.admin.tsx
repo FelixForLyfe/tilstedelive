@@ -17,17 +17,19 @@ export const Route = createFileRoute("/app/admin")({
 type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog";
 
 function AdminSide() {
-  const { aktivOrgId, erAdmin } = useOrg();
+  const { aktivOrgId, erAdmin, terms } = useOrg();
   const [tab, setTab] = useState<Tab>("boern");
 
   if (!erAdmin) {
     return <div className="glass rounded-2xl p-10 text-center text-muted-foreground">Kun admin har adgang.</div>;
   }
 
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
   const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: "boern", label: "Børn", icon: Users },
-    { id: "kategorier", label: "Kategorier", icon: Tag },
-    { id: "aktiviteter", label: "Aktiviteter", icon: ActIcon },
+    { id: "boern", label: cap(terms.deltagere), icon: Users },
+    { id: "kategorier", label: cap(terms.grupper), icon: Tag },
+    { id: "aktiviteter", label: cap(terms.aktiviteter), icon: ActIcon },
     { id: "personale", label: "Personale", icon: UserCog },
     { id: "auditlog", label: "Aktivitetslog", icon: ScrollText },
   ];
@@ -175,6 +177,8 @@ function BoernPanel({ orgId }: { orgId: string }) {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [uploader, setUploader] = useState(false);
   const fotoRef = useRef<HTMLInputElement>(null);
+  const { terms } = useOrg();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const [form, setForm] = useState<any>({ full_name: "", category_id: "", parent_1_name: "", parent_1_phone: "", parent_2_name: "", parent_2_phone: "", address: "", cpr_number: "", doctor_name: "", doctor_phone: "", allergies: "", special_notes: "", can_leave_alone: false, default_leave_time: "" });
 
   const indlaes = useCallback(async () => {
@@ -198,6 +202,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
     const payload: any = { ...form, organization_id: orgId };
     if (!payload.category_id) payload.category_id = null;
     if (!payload.default_leave_time) payload.default_leave_time = null;
+    if (!terms.visCpr) payload.cpr_number = null;
 
     const { data, error } = await supabase.from("children").insert(payload).select("*, categories(name)").single();
     if (error) { setUploader(false); toast.error(error.message); return; }
@@ -224,10 +229,10 @@ function BoernPanel({ orgId }: { orgId: string }) {
     reset();
     setAaben(false);
     setUploader(false);
-    toast.success("Barn tilføjet");
+    toast.success(`${cap(terms.deltager)} tilføjet`);
   };
   const slet = async (id: string) => {
-    if (!confirm("Slet barn? Alle tilknyttede data slettes.")) return;
+    if (!confirm(`Slet ${terms.deltager}? Alle tilknyttede data slettes.`)) return;
     const { error } = await supabase.from("children").delete().eq("id", id);
     if (error) return toast.error(error.message);
     indlaes();
@@ -243,7 +248,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
     <div className="space-y-4">
       <button onClick={() => setAaben(!aaben)}
         className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow">
-        <Plus className="h-4 w-4" /> {aaben ? "Luk formular" : "Tilføj barn"}
+        <Plus className="h-4 w-4" /> {aaben ? "Luk formular" : `Tilføj ${terms.deltager}`}
       </button>
 
       {aaben && (
@@ -287,7 +292,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
           <Felt label="Forælder 2" v={form.parent_2_name} on={(v) => setForm({ ...form, parent_2_name: v })} />
           <Felt label="Telefon" v={form.parent_2_phone} on={(v) => setForm({ ...form, parent_2_phone: v })} />
           <Felt label="Adresse" v={form.address} on={(v) => setForm({ ...form, address: v })} />
-          <Felt label="CPR-nummer" v={form.cpr_number} on={(v) => setForm({ ...form, cpr_number: v })} />
+          {terms.visCpr && <Felt label="CPR-nummer" v={form.cpr_number} on={(v) => setForm({ ...form, cpr_number: v })} />}
           <Felt label="Læge" v={form.doctor_name} on={(v) => setForm({ ...form, doctor_name: v })} />
           <Felt label="Lægens telefon" v={form.doctor_phone} on={(v) => setForm({ ...form, doctor_phone: v })} />
           <Felt label="Allergier" v={form.allergies} on={(v) => setForm({ ...form, allergies: v })} />
@@ -304,7 +309,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
           <div className="md:col-span-2">
             <button disabled={uploader} className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
               {uploader && <Loader2 className="h-4 w-4 animate-spin" />}
-              Gem barn
+              Gem {terms.deltager}
             </button>
           </div>
         </form>
@@ -314,7 +319,7 @@ function BoernPanel({ orgId }: { orgId: string }) {
         {list.map((b) => (
           <BarnRaekke key={b.id} barn={b} onOpen={() => setDetaljeId(b.id)} onSlet={() => slet(b.id)} />
         ))}
-        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen børn endnu.</p>}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen {terms.deltagere} endnu.</p>}
       </div>
 
       <BarnDetalje barnId={detaljeId} open={!!detaljeId} onClose={() => { setDetaljeId(null); indlaes(); }} />

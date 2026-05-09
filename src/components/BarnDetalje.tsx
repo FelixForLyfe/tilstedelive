@@ -29,7 +29,7 @@ type Barn = {
 };
 
 export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; open: boolean; onClose: () => void }) {
-  const { erAdmin } = useOrg();
+  const { erAdmin, terms } = useOrg();
   const [barn, setBarn] = useState<Barn | null>(null);
   const [uploader, setUploader] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,7 +121,7 @@ export function BarnDetalje({ barnId, open, onClose }: { barnId: string | null; 
               <Info l="Forælder 1" v={barn.parent_1_name} sub={barn.parent_1_phone} />
               <Info l="Forælder 2" v={barn.parent_2_name} sub={barn.parent_2_phone} />
               <Info l="Adresse" v={barn.address} />
-              <Info l="CPR-nummer" v={barn.cpr_number} />
+              {terms.visCpr && <Info l="CPR-nummer" v={barn.cpr_number} />}
               <Info l="Læge" v={barn.doctor_name} sub={barn.doctor_phone} />
               <Info l="Standard hjemsendelse" v={barn.default_leave_time?.slice(0, 5)} />
               <Info l="Allergier" v={barn.allergies} />
