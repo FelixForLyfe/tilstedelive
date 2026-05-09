@@ -9,7 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuperadminRouteImport } from './routes/superadmin'
 import { Route as SikkerhedRouteImport } from './routes/sikkerhed'
+import { Route as PrivatlivspolitikRouteImport } from './routes/privatlivspolitik'
+import { Route as PriserRouteImport } from './routes/priser'
+import { Route as SletDataRouteImport } from './routes/slet-data'
+import { Route as SetupTwoFaRouteImport } from './routes/setup-2fa'
+import { Route as VerifyTwoFaRouteImport } from './routes/verify-2fa'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
@@ -25,6 +31,36 @@ import { Route as AppArkivRouteImport } from './routes/app.arkiv'
 import { Route as AppAktiviteterRouteImport } from './routes/app.aktiviteter'
 import { Route as AppAdminRouteImport } from './routes/app.admin'
 
+const SuperadminRoute = SuperadminRouteImport.update({
+  id: '/superadmin',
+  path: '/superadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivatlivspolitikRoute = PrivatlivspolitikRouteImport.update({
+  id: '/privatlivspolitik',
+  path: '/privatlivspolitik',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PriserRoute = PriserRouteImport.update({
+  id: '/priser',
+  path: '/priser',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SletDataRoute = SletDataRouteImport.update({
+  id: '/slet-data',
+  path: '/slet-data',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupTwoFaRoute = SetupTwoFaRouteImport.update({
+  id: '/setup-2fa',
+  path: '/setup-2fa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyTwoFaRoute = VerifyTwoFaRouteImport.update({
+  id: '/verify-2fa',
+  path: '/verify-2fa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SikkerhedRoute = SikkerhedRouteImport.update({
   id: '/sikkerhed',
   path: '/sikkerhed',
@@ -107,6 +143,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRouteWithChildren
   '/signup': typeof SignupRouteWithChildren
   '/sikkerhed': typeof SikkerhedRoute
+  '/superadmin': typeof SuperadminRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/priser': typeof PriserRoute
+  '/slet-data': typeof SletDataRoute
+  '/setup-2fa': typeof SetupTwoFaRoute
+  '/verify-2fa': typeof VerifyTwoFaRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -121,6 +163,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sikkerhed': typeof SikkerhedRoute
+  '/superadmin': typeof SuperadminRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/priser': typeof PriserRoute
+  '/slet-data': typeof SletDataRoute
+  '/setup-2fa': typeof SetupTwoFaRoute
+  '/verify-2fa': typeof VerifyTwoFaRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -139,6 +187,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRouteWithChildren
   '/signup': typeof SignupRouteWithChildren
   '/sikkerhed': typeof SikkerhedRoute
+  '/superadmin': typeof SuperadminRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/priser': typeof PriserRoute
+  '/slet-data': typeof SletDataRoute
+  '/setup-2fa': typeof SetupTwoFaRoute
+  '/verify-2fa': typeof VerifyTwoFaRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
@@ -158,6 +212,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/sikkerhed'
+    | '/superadmin'
+    | '/privatlivspolitik'
+    | '/priser'
+    | '/slet-data'
+    | '/setup-2fa'
+    | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -172,6 +232,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/sikkerhed'
+    | '/superadmin'
+    | '/privatlivspolitik'
+    | '/priser'
+    | '/slet-data'
+    | '/setup-2fa'
+    | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -189,6 +255,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/sikkerhed'
+    | '/superadmin'
+    | '/privatlivspolitik'
+    | '/priser'
+    | '/slet-data'
+    | '/setup-2fa'
+    | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
@@ -207,6 +279,12 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRouteWithChildren
   SignupRoute: typeof SignupRouteWithChildren
   SikkerhedRoute: typeof SikkerhedRoute
+  SuperadminRoute: typeof SuperadminRoute
+  PrivatlivspolitikRoute: typeof PrivatlivspolitikRoute
+  PriserRoute: typeof PriserRoute
+  SletDataRoute: typeof SletDataRoute
+  SetupTwoFaRoute: typeof SetupTwoFaRoute
+  VerifyTwoFaRoute: typeof VerifyTwoFaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -216,6 +294,48 @@ declare module '@tanstack/react-router' {
       path: '/sikkerhed'
       fullPath: '/sikkerhed'
       preLoaderRoute: typeof SikkerhedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/superadmin': {
+      id: '/superadmin'
+      path: '/superadmin'
+      fullPath: '/superadmin'
+      preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privatlivspolitik': {
+      id: '/privatlivspolitik'
+      path: '/privatlivspolitik'
+      fullPath: '/privatlivspolitik'
+      preLoaderRoute: typeof PrivatlivspolitikRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/priser': {
+      id: '/priser'
+      path: '/priser'
+      fullPath: '/priser'
+      preLoaderRoute: typeof PriserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/slet-data': {
+      id: '/slet-data'
+      path: '/slet-data'
+      fullPath: '/slet-data'
+      preLoaderRoute: typeof SletDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup-2fa': {
+      id: '/setup-2fa'
+      path: '/setup-2fa'
+      fullPath: '/setup-2fa'
+      preLoaderRoute: typeof SetupTwoFaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-2fa': {
+      id: '/verify-2fa'
+      path: '/verify-2fa'
+      fullPath: '/verify-2fa'
+      preLoaderRoute: typeof VerifyTwoFaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -370,6 +490,12 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRouteWithChildren,
   SignupRoute: SignupRouteWithChildren,
   SikkerhedRoute: SikkerhedRoute,
+  SuperadminRoute: SuperadminRoute,
+  PrivatlivspolitikRoute: PrivatlivspolitikRoute,
+  PriserRoute: PriserRoute,
+  SletDataRoute: SletDataRoute,
+  SetupTwoFaRoute: SetupTwoFaRoute,
+  VerifyTwoFaRoute: VerifyTwoFaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
