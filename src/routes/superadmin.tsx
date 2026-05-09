@@ -33,6 +33,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Line,
+  LineChart,
+  ReferenceLine,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -51,9 +54,12 @@ import {
   superadminCreateCustomPlan,
   superadminUpdateCustomPlan,
   superadminListOrgNames,
+  superadminListOrgNotes,
+  superadminSaveOrgNote,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
+  type OrgNote,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -116,6 +122,8 @@ type DashboardData = {
   totalAttendanceRecords: number;
   totalTimeLogs: number;
   costs: MonthlyCost[];
+  lastActivityByOrg: Record<string, string>;
+  orgsWithCheckinCount: number;
 };
 
 type CostDraft = { category: string; amount_dkk: number; note: string };
@@ -170,6 +178,7 @@ const EVENT_LABELS: Record<string, string> = {
   SUPERADMIN_SAVE_COSTS: "Gemte månedlige omkostninger",
   SUPERADMIN_CREATE_CUSTOM_PLAN: "Oprettede misc. plan",
   SUPERADMIN_UPDATE_CUSTOM_PLAN: "Opdaterede misc. plan",
+  SUPERADMIN_SAVE_ORG_NOTE: "Gemte organisations-note",
 };
 
 const CUSTOM_PLAN_STATUS_LABELS: Record<string, string> = {
@@ -363,12 +372,17 @@ function DashboardTab({ accessToken }: { accessToken: string }) {
   const [editingCosts, setEditingCosts] = useState(false);
   const [costDraft, setCostDraft] = useState<CostDraft[]>([]);
   const [savingCosts, setSavingCosts] = useState(false);
+  const [orgNotes, setOrgNotes] = useState<Record<string, OrgNote>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await superadminGetDashboard({ data: { accessToken } });
+      const [result, notes] = await Promise.all([
+        superadminGetDashboard({ data: { accessToken } }),
+        superadminListOrgNotes({ data: { accessToken } }).catch(() => ({})),
+      ]);
       setDashData(result as DashboardData);
+      setOrgNotes((notes ?? {}) as Record<string, OrgNote>);
     } catch {
       toast.error("Kunne ikke indlæse dashboard");
     } finally {
@@ -504,6 +518,45 @@ function DashboardTab({ accessToken }: { accessToken: string }) {
   const churnPct = totalEverTrialed > 0 ? Math.round((canceledOrgs.length / totalEverTrialed) * 100) : 0;
   const churnHealth: "green" | "yellow" | "red" =
     churnPct <= 5 ? "green" : churnPct <= 10 ? "yellow" : "red";
+
+  // ── BI: Churn prediction — trials expiring within 3 days with no paid sub ──
+  const d3 = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const churnRisk = trialingOrgs.filter(
+    o => o.trial_ends_at && new Date(o.trial_ends_at) <= d3,
+  );
+
+  // ── BI: Revenue forecast — linear growth extrapolation ────────────────────
+  const last3PayingPerMonth = Array.from({ length: 3 }, (_, i) => {
+    const key = new Date(now.getFullYear(), now.getMonth() - 2 + i, 1).toISOString().slice(0, 7);
+    return activePayingOrgs.filter(o => o.created_at.slice(0, 7) === key).length;
+  });
+  const avgMonthlyNewPaying = last3PayingPerMonth.reduce((a, b) => a + b, 0) / 3;
+  const monthlyGrowthRate = activePayingOrgs.length > 0 ? avgMonthlyNewPaying / activePayingOrgs.length : 0;
+  const forecastData = Array.from({ length: 4 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    return {
+      month: i === 0
+        ? "Nu"
+        : d.toLocaleDateString("da-DK", { month: "short", year: "2-digit" }),
+      mrr: Math.round(totalMRR * Math.pow(1 + monthlyGrowthRate, i)),
+      projected: i > 0,
+    };
+  });
+
+  // ── BI: Inactive orgs — last activity > 14 days ago (previously active only) ─
+  const d14 = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const lastActivity = dashData.lastActivityByOrg;
+  const inactiveOrgs = orgs.filter(
+    o => lastActivity[o.id] && new Date(lastActivity[o.id]) < d14,
+  );
+
+  // ── BI: Conversion funnel ─────────────────────────────────────────────────
+  const funnelSteps = [
+    { label: "Tilmeldinger", count: orgs.length },
+    { label: "Har personale", count: orgs.filter(o => (dashData.orgMemberCounts[o.id] ?? 0) > 0).length },
+    { label: "Brugt appen", count: dashData.orgsWithCheckinCount },
+    { label: "Betalende", count: activePayingOrgs.length },
+  ];
 
   return (
     <div className="space-y-8">
@@ -750,6 +803,351 @@ function DashboardTab({ accessToken }: { accessToken: string }) {
           <HealthPill label="Churn-rate" status={churnHealth} value={`${churnPct}% (mål: <5%)`} />
         </div>
       </section>
+
+      {/* ── BI: Churn prediction ── */}
+      <section>
+        <h2 className="mb-1 font-display text-xl font-bold">Udløber snart</h2>
+        <p className="mb-3 text-sm text-muted-foreground">Prøveperioder der udløber inden for 3 dage uden aktivt abonnement</p>
+        {churnRisk.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-6 text-sm text-muted-foreground">
+            Ingen prøveperioder i kritisk zone ✓
+          </div>
+        ) : (
+          <div className="glass overflow-hidden rounded-2xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-left">Organisation</th>
+                  <th className="px-4 py-3 text-left">Prøveperiode udløber</th>
+                  <th className="px-4 py-3 text-left">Dage tilbage</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {churnRisk.map((org, i) => {
+                  const daysLeft = Math.ceil(
+                    (new Date(org.trial_ends_at!).getTime() - now.getTime()) / 86_400_000,
+                  );
+                  return (
+                    <tr key={org.id} className={`border-b border-border/50 ${i % 2 ? "bg-surface/20" : ""}`}>
+                      <td className="px-4 py-3 font-medium">{org.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{fmtDato(org.trial_ends_at!)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                          daysLeft <= 1 ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning"
+                        }`}>
+                          {daysLeft <= 0 ? "Udløbet" : `${daysLeft} dag${daysLeft === 1 ? "" : "e"}`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <QuickExtendButton
+                          orgId={org.id}
+                          accessToken={accessToken}
+                          onDone={load}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── BI: Revenue forecast ── */}
+      <section>
+        <h2 className="mb-1 font-display text-xl font-bold">Omsætningsprognose</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Fremskrevet MRR de næste 3 måneder baseret på nuværende vækstrate
+          {monthlyGrowthRate > 0 && (
+            <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+              +{(monthlyGrowthRate * 100).toFixed(1)}%/md
+            </span>
+          )}
+        </p>
+        <div className="glass rounded-2xl p-5">
+          {totalMRR === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Ingen betalende kunder endnu — prognose ikke tilgængelig</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={forecastData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(v: number) => [fmtKr(v), "MRR"]}
+                  contentStyle={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                />
+                <ReferenceLine x="Nu" stroke="hsl(var(--border))" strokeDasharray="4 2" />
+                <Bar
+                  dataKey="mrr"
+                  name="MRR"
+                  radius={[4, 4, 0, 0]}
+                  fill="hsl(var(--primary))"
+                  fillOpacity={forecastData.map(d => d.projected ? 0.45 : 1) as any}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          <p className="mt-2 text-center text-xs text-muted-foreground opacity-60">
+            Prognosen er baseret på aggregerede abonnementsdata — ingen persondata indgår
+          </p>
+        </div>
+      </section>
+
+      {/* ── BI: Inactive organisations ── */}
+      <section>
+        <h2 className="mb-1 font-display text-xl font-bold">Inaktive organisationer</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Organisationer med aktivitet tidligere, men ingen check-ins de seneste 14 dage
+        </p>
+        {inactiveOrgs.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-6 text-sm text-muted-foreground">
+            {Object.keys(lastActivity).length === 0
+              ? "Aktivitetsdata ikke tilgængeligt endnu — kør migration 20260509260000"
+              : "Ingen tidligere aktive organisationer er inaktive ✓"}
+          </div>
+        ) : (
+          <div className="glass overflow-hidden rounded-2xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-left">Organisation</th>
+                  <th className="px-4 py-3 text-left">Seneste aktivitet</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Opfølgningsnote</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inactiveOrgs.map((org, i) => (
+                  <tr key={org.id} className={`border-b border-border/50 align-top ${i % 2 ? "bg-surface/20" : ""}`}>
+                    <td className="px-4 py-3 font-medium">{org.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {fmtDato(lastActivity[org.id])}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[org.subscription_status] ?? "bg-muted text-muted-foreground"}`}>
+                        {STATUS_LABELS[org.subscription_status] ?? org.subscription_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <InlineNoteEditor
+                        orgId={org.id}
+                        initialNote={orgNotes[org.id]?.note ?? ""}
+                        savedAt={orgNotes[org.id]?.created_at}
+                        accessToken={accessToken}
+                        onSaved={(note) =>
+                          setOrgNotes((prev) => ({
+                            ...prev,
+                            [org.id]: {
+                              ...(prev[org.id] ?? { id: "", organization_id: org.id, created_by: null }),
+                              note,
+                              created_at: new Date().toISOString(),
+                            },
+                          }))
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── BI: Conversion funnel ── */}
+      <section>
+        <h2 className="mb-1 font-display text-xl font-bold">Konverteringstragt</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Aggregerede tal — ingen individuelle brugerdata
+        </p>
+        <div className="glass space-y-2 rounded-2xl p-5">
+          {funnelSteps.map((step, i) => {
+            const pct = funnelSteps[0].count > 0
+              ? Math.round((step.count / funnelSteps[0].count) * 100)
+              : 0;
+            const colors = ["bg-primary", "bg-primary/70", "bg-primary/50", "bg-success"];
+            return (
+              <div key={step.label}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium">{step.label}</span>
+                  <span className="text-muted-foreground">
+                    {step.count} <span className="text-xs">({pct}%)</span>
+                  </span>
+                </div>
+                <div className="h-7 w-full overflow-hidden rounded-lg bg-surface">
+                  <div
+                    className={`h-full rounded-lg ${colors[i]} flex items-center justify-end pr-2 transition-all`}
+                    style={{ width: `${Math.max(pct, 2)}%` }}
+                  />
+                </div>
+                {i < funnelSteps.length - 1 && funnelSteps[0].count > 0 && (
+                  <p className="mt-0.5 text-right text-xs text-muted-foreground">
+                    ↓ {Math.round((funnelSteps[i + 1].count / (funnelSteps[i].count || 1)) * 100)}% fortsætter
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── BI helper: Quick trial extend ───────────────────────────────────────────
+
+function QuickExtendButton({
+  orgId,
+  accessToken,
+  onDone,
+}: {
+  orgId: string;
+  accessToken: string;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [newDate, setNewDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [saving, setSaving] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated"
+      >
+        Forlæng prøveperiode
+      </button>
+    );
+  }
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await superadminExtendTrial({
+        data: {
+          accessToken,
+          orgId,
+          newTrialEndsAt: newDate,
+          reason: "Forlænget fra churn-prediction panel",
+        },
+      });
+      toast.success("Prøveperiode forlænget");
+      setOpen(false);
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Fejl ved forlængelse");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="date"
+        value={newDate}
+        onChange={(e) => setNewDate(e.target.value)}
+        className="rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none"
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="rounded-lg bg-gradient-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+      >
+        {saving ? "…" : "Gem"}
+      </button>
+      <button onClick={() => setOpen(false)} className="rounded-lg p-1 text-muted-foreground hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─── BI helper: Inline org note editor ───────────────────────────────────────
+
+function InlineNoteEditor({
+  orgId,
+  initialNote,
+  savedAt,
+  accessToken,
+  onSaved,
+}: {
+  orgId: string;
+  initialNote: string;
+  savedAt?: string;
+  accessToken: string;
+  onSaved: (note: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initialNote);
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <div className="flex items-start gap-2">
+        <p className={`flex-1 text-xs ${initialNote ? "text-foreground" : "text-muted-foreground italic"}`}>
+          {initialNote || "Ingen note endnu"}
+          {savedAt && <span className="ml-1 opacity-50">· {fmtDato(savedAt)}</span>}
+        </p>
+        <button
+          onClick={() => { setDraft(initialNote); setEditing(true); }}
+          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  const handleSave = async () => {
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      await superadminSaveOrgNote({ data: { accessToken, orgId, note: draft.trim() } });
+      onSaved(draft.trim());
+      setEditing(false);
+      toast.success("Note gemt");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme note");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] text-warning">Kun organisatoriske noter — ingen personoplysninger om børn eller brugere</p>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        maxLength={2000}
+        placeholder="Fx: Kontaktet direktør 9. maj — interesseret i kommune-plan"
+        className="w-full rounded-lg border border-input bg-background p-2 text-xs focus:border-ring focus:outline-none"
+        autoFocus
+      />
+      <div className="flex gap-1.5">
+        <button
+          onClick={handleSave}
+          disabled={saving || !draft.trim()}
+          className="inline-flex items-center gap-1 rounded-lg bg-gradient-primary px-2 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          <Save className="h-3 w-3" /> {saving ? "…" : "Gem"}
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          className="rounded-lg border border-border px-2 py-1 text-xs hover:bg-surface-elevated"
+        >
+          Annullér
+        </button>
+      </div>
     </div>
   );
 }

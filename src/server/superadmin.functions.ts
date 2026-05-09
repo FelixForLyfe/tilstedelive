@@ -263,6 +263,20 @@ export const superadminGetDashboard = createServerFn({ method: "POST" })
         supabaseAdmin.from("employee_time_logs").select("*", { count: "exact", head: true }),
       ]);
 
+    // Last activity per org — aggregated, no individual data exposed.
+    // Falls back gracefully if migration 20260509260000 not yet applied.
+    let lastActivityByOrg: Record<string, string> = {};
+    try {
+      const { data: activityRows } = await (supabaseAdmin as any).rpc(
+        "superadmin_org_last_activity",
+      );
+      for (const row of activityRows ?? []) {
+        lastActivityByOrg[row.organization_id as string] = row.last_activity as string;
+      }
+    } catch {
+      // function may not exist yet
+    }
+
     const orgMemberCounts: Record<string, number> = {};
     for (const m of members ?? []) {
       orgMemberCounts[m.organization_id] = (orgMemberCounts[m.organization_id] ?? 0) + 1;
@@ -287,6 +301,8 @@ export const superadminGetDashboard = createServerFn({ method: "POST" })
       totalAttendanceRecords: totalAttendance ?? 0,
       totalTimeLogs: totalTimeLogs ?? 0,
       costs: costs as MonthlyCost[],
+      lastActivityByOrg,
+      orgsWithCheckinCount: Object.keys(lastActivityByOrg).length,
     };
   });
 
@@ -617,6 +633,76 @@ export const superadminCreateCustomPlan = createServerFn({ method: "POST" })
       plan_name: data.name,
       price_dkk: data.price_dkk,
       start_date: data.start_date,
+    });
+
+    return { success: true };
+  });
+
+// ─── Org notes (internal CRM — organisational data only) ──────────────────────
+
+export type OrgNote = {
+  id: string;
+  organization_id: string;
+  note: string;
+  created_at: string;
+  created_by: string | null;
+};
+
+export const superadminListOrgNotes = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    // Fetch only the latest note per org using a DISTINCT ON equivalent:
+    // get all notes ordered desc, then deduplicate in JS — avoids needing a separate RPC.
+    const { data: notes, error } = await (supabaseAdmin as any)
+      .from("org_notes")
+      .select("id, organization_id, note, created_at, created_by")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error && isMissingTable(error)) return {} as Record<string, OrgNote>;
+    if (error) throw new Error(error.message);
+
+    // Keep only the latest note per org
+    const latestByOrg: Record<string, OrgNote> = {};
+    for (const n of notes ?? []) {
+      if (!latestByOrg[n.organization_id]) {
+        latestByOrg[n.organization_id] = {
+          id: n.id,
+          organization_id: n.organization_id,
+          note: n.note,
+          created_at: n.created_at,
+          created_by: n.created_by ?? null,
+        };
+      }
+    }
+    return latestByOrg;
+  });
+
+export const superadminSaveOrgNote = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        orgId: z.string().uuid(),
+        note: z.string().trim().min(1).max(2000),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { error } = await (supabaseAdmin as any).from("org_notes").insert({
+      organization_id: data.orgId,
+      note: data.note,
+      created_by: admin.id,
+    });
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_SAVE_ORG_NOTE", data.orgId, {
+      note_length: data.note.length,
     });
 
     return { success: true };
