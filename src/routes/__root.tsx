@@ -4,6 +4,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { OrgProvider } from "@/contexts/OrgContext";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { CookieBanner } from "@/components/CookieBanner";
 import { applySecurityHeaders } from "@/lib/security-headers";
 
 function NotFoundComponent() {
@@ -82,6 +83,7 @@ function RootComponent() {
         <Outlet />
         <Toaster richColors position="top-center" />
         <InstallPrompt />
+        <CookieBanner />
       </OrgProvider>
     </AuthProvider>
   );
