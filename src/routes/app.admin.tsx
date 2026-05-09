@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2 } from "lucide-react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2, ScrollText, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { BarnDetalje } from "@/components/BarnDetalje";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/app/admin")({
   component: AdminSide,
 });
 
-type Tab = "boern" | "kategorier" | "aktiviteter" | "personale";
+type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog";
 
 function AdminSide() {
   const { aktivOrgId, erAdmin } = useOrg();
@@ -29,6 +29,7 @@ function AdminSide() {
     { id: "kategorier", label: "Kategorier", icon: Tag },
     { id: "aktiviteter", label: "Aktiviteter", icon: ActIcon },
     { id: "personale", label: "Personale", icon: UserCog },
+    { id: "auditlog", label: "Aktivitetslog", icon: ScrollText },
   ];
 
   return (
@@ -51,6 +52,7 @@ function AdminSide() {
       {aktivOrgId && tab === "kategorier" && <KategoriPanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "aktiviteter" && <AktivitetPanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "personale" && <PersonalePanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "auditlog" && <AuditLogPanel orgId={aktivOrgId} />}
     </div>
   );
 }
@@ -541,6 +543,144 @@ function PersonalePanel({ orgId }: { orgId: string }) {
           {list.length === 0 && <p className="text-sm text-muted-foreground">Ingen medlemmer endnu.</p>}
         </div>
       </section>
+    </div>
+  );
+}
+
+// ===== AKTIVITETSLOG =====
+const TABEL_NAVNE: Record<string, string> = {
+  children: "Barn",
+  organization_members: "Personale",
+  organization_invites: "Invitation",
+  day_status: "Dagsstatus",
+  organizations: "Organisation",
+  profiles: "Profil",
+};
+
+const HANDLING_FARVE: Record<string, string> = {
+  INSERT: "bg-success/15 text-success",
+  UPDATE: "bg-warning/15 text-warning",
+  DELETE: "bg-destructive/15 text-destructive",
+};
+
+const HANDLING_LABEL: Record<string, string> = {
+  INSERT: "Oprettet",
+  UPDATE: "Ændret",
+  DELETE: "Slettet",
+};
+
+function formaterTidspunkt(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("da-DK", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function AuditLogPanel({ orgId }: { orgId: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [profiler, setProfiler] = useState<Record<string, { full_name: string | null; email: string | null }>>({});
+  const [loading, setLoading] = useState(true);
+
+  const indlaes = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select("id, created_at, action, table_name, record_id, changed_fields, user_id")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) { toast.error("Kunne ikke hente log: " + error.message); setLoading(false); return; }
+
+    const entries = data ?? [];
+    setLogs(entries);
+
+    // Fetch profiles for unique user_ids
+    const userIds = [...new Set(entries.map((e: any) => e.user_id).filter(Boolean))];
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+      const map: Record<string, any> = {};
+      for (const p of profs ?? []) map[p.id] = p;
+      setProfiler(map);
+    }
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => { indlaes(); }, [indlaes]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-lg font-bold">Aktivitetslog</h2>
+        </div>
+        <button
+          onClick={indlaes}
+          className="rounded-xl bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-surface-elevated hover:text-foreground"
+        >
+          Opdater
+        </button>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Viser de seneste 200 hændelser for denne organisation. Loggen er skrivebeskyttet og kan ikke slettes.
+      </p>
+
+      {loading && (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {!loading && logs.length === 0 && (
+        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          Ingen log-hændelser endnu. Log fyldes automatisk op, når data oprettes, ændres eller slettes.
+        </div>
+      )}
+
+      {!loading && logs.length > 0 && (
+        <div className="space-y-1.5">
+          {logs.map((log) => {
+            const profil = log.user_id ? profiler[log.user_id] : null;
+            const visNavn = profil?.full_name ?? profil?.email ?? "System";
+            const tabelNavn = TABEL_NAVNE[log.table_name] ?? log.table_name;
+            return (
+              <div key={log.id} className="glass flex flex-wrap items-start gap-3 rounded-xl p-3 text-sm">
+                {/* Timestamp */}
+                <span className="w-36 shrink-0 text-xs text-muted-foreground">
+                  {formaterTidspunkt(log.created_at)}
+                </span>
+
+                {/* Action badge */}
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${HANDLING_FARVE[log.action] ?? "bg-surface text-muted-foreground"}`}>
+                  {HANDLING_LABEL[log.action] ?? log.action}
+                </span>
+
+                {/* Table */}
+                <span className="shrink-0 font-medium">{tabelNavn}</span>
+
+                {/* Changed fields (UPDATE only) */}
+                {log.changed_fields?.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({log.changed_fields.join(", ")})
+                  </span>
+                )}
+
+                {/* Spacer */}
+                <span className="flex-1" />
+
+                {/* Who */}
+                <span className="text-xs text-muted-foreground">{visNavn}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
