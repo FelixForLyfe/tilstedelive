@@ -24,6 +24,10 @@ import {
   Save,
   Layers,
   CalendarDays,
+  HeartPulse,
+  ChevronDown,
+  ChevronUp,
+  StickyNote,
 } from "lucide-react";
 import {
   BarChart,
@@ -56,10 +60,12 @@ import {
   superadminListOrgNames,
   superadminListOrgNotes,
   superadminSaveOrgNote,
+  superadminGetCustomerSuccess,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
   type OrgNote,
+  type OrgHealthData,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -196,6 +202,7 @@ const CUSTOM_PLAN_STATUS_COLORS: Record<string, string> = {
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "orgs", label: "Organisationer", icon: Building2 },
+  { id: "kunder", label: "Kunder", icon: HeartPulse },
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
   { id: "misc", label: "Misc. Planer", icon: Layers },
@@ -317,6 +324,7 @@ function SuperadminPanel() {
         {activeTab === "orgs" && (
           <OrgsTab orgs={orgs} loading={orgsLoading} onEdit={setEditOrg} onRefresh={loadOrgs} />
         )}
+        {activeTab === "kunder" && <CustomersTab accessToken={accessToken} />}
         {activeTab === "users" && <UsersTab accessToken={accessToken} />}
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
@@ -1147,6 +1155,338 @@ function InlineNoteEditor({
         >
           Annullér
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Customer success tab ─────────────────────────────────────────────────────
+
+const ONBOARDING_LABELS = [
+  "Organisation oprettet",
+  "Første personale tilføjet",
+  "Første medlem tilføjet",
+  "Første check-in gennemført",
+  "Aktivt abonnement",
+];
+
+const HEALTH_COLORS = {
+  green: { badge: "bg-success/15 text-success", dot: "bg-success" },
+  yellow: { badge: "bg-warning/15 text-warning", dot: "bg-warning" },
+  red: { badge: "bg-destructive/15 text-destructive", dot: "bg-destructive" },
+};
+
+function OnboardingBar({ score, steps }: { score: number; steps: Record<string, boolean> }) {
+  const vals = Object.values(steps);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-0.5">
+        {vals.map((done, i) => (
+          <div
+            key={i}
+            className={`h-2 w-4 rounded-sm ${done ? "bg-primary" : "bg-surface"}`}
+          />
+        ))}
+      </div>
+      <span className="text-xs text-muted-foreground">{score}/5</span>
+    </div>
+  );
+}
+
+function CustomersTab({ accessToken }: { accessToken: string }) {
+  const [orgs, setOrgs] = useState<OrgHealthData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [soeg, setSoeg] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [inactiveOpen, setInactiveOpen] = useState(true);
+  const [localNotes, setLocalNotes] = useState<Record<string, OrgNote>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await superadminGetCustomerSuccess({ data: { accessToken } });
+      const list = data as OrgHealthData[];
+      setOrgs(list);
+      const seeded: Record<string, OrgNote> = {};
+      for (const o of list) {
+        if (o.latestNote) seeded[o.id] = o.latestNote;
+      }
+      setLocalNotes(seeded);
+    } catch {
+      toast.error("Kunne ikke indlæse kundeoverblik");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtrede = soeg
+    ? orgs.filter((o) => o.name.toLowerCase().includes(soeg.toLowerCase()))
+    : orgs;
+
+  // Inactive 7-day: previously had activity but none in last 7 days
+  const inactive7d = orgs.filter((o) => o.lastActivity && o.checkins7d === 0);
+  // Never used: no check-ins ever
+  const neverUsed = orgs.filter((o) => !o.lastActivity);
+
+  const healthCount = (c: "green" | "yellow" | "red") =>
+    orgs.filter((o) => o.healthColor === c).length;
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Indlæser kundeoverblik…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Kundeoverblik</h2>
+          <p className="text-sm text-muted-foreground">
+            {orgs.length} organisationer ·{" "}
+            <span className="text-success">{healthCount("green")} sunde</span> ·{" "}
+            <span className="text-warning">{healthCount("yellow")} middel</span> ·{" "}
+            <span className="text-destructive">{healthCount("red")} kritiske</span>
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+        >
+          <RefreshCw className="h-4 w-4" /> Opdater
+        </button>
+      </div>
+
+      {/* ── Inactive 7-day alert ── */}
+      {inactive7d.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-warning/30 bg-warning/5">
+          <button
+            onClick={() => setInactiveOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-5 py-3 text-left"
+          >
+            <div className="flex items-center gap-2 text-sm font-semibold text-warning">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {inactive7d.length} organisation{inactive7d.length > 1 ? "er" : ""} med
+              0 check-ins de seneste 7 dage
+            </div>
+            {inactiveOpen
+              ? <ChevronUp className="h-4 w-4 text-warning" />
+              : <ChevronDown className="h-4 w-4 text-warning" />}
+          </button>
+          {inactiveOpen && (
+            <ul className="divide-y divide-warning/20 border-t border-warning/20">
+              {inactive7d.map((o) => (
+                <li key={o.id} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                  <span className="font-medium">{o.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Seneste aktivitet: {o.lastActivity ? fmtDato(o.lastActivity) : "–"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ── Never used notice ── */}
+      {neverUsed.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface/50 px-5 py-3 text-sm text-muted-foreground">
+          <strong>{neverUsed.length}</strong> organisation{neverUsed.length > 1 ? "er" : ""} har
+          endnu ikke foretaget nogen check-ins.
+        </div>
+      )}
+
+      {/* ── Search ── */}
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={soeg}
+          onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg organisation…"
+          className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
+        />
+      </div>
+
+      {/* ── Main table ── */}
+      <div className="glass overflow-hidden rounded-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3 text-left">Organisation</th>
+                <th className="px-4 py-3 text-left">Sundhed</th>
+                <th className="px-4 py-3 text-left">Onboarding</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Check-ins (7d)</th>
+                <th className="px-4 py-3 text-left">Senest aktiv</th>
+                <th className="px-4 py-3 text-left">Note</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtrede.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                    Ingen organisationer
+                  </td>
+                </tr>
+              ) : (
+                filtrede.map((org, i) => {
+                  const hc = HEALTH_COLORS[org.healthColor];
+                  const isExpanded = expanded === org.id;
+                  return (
+                    <>
+                      <tr
+                        key={org.id}
+                        className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""} align-top`}
+                      >
+                        <td className="px-4 py-3 font-medium">{org.name}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${hc.badge}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${hc.dot}`} />
+                            {org.healthScore}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <OnboardingBar score={org.onboardingScore} steps={org.onboarding} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[org.subscription_status] ?? "bg-muted text-muted-foreground"}`}>
+                            {STATUS_LABELS[org.subscription_status] ?? org.subscription_status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {org.checkins7d > 0
+                            ? <span className="font-semibold text-foreground">{org.checkins7d}</span>
+                            : <span className="text-destructive/70">0</span>}
+                          {org.activeDays7d > 0 && (
+                            <span className="ml-1 text-xs opacity-60">({org.activeDays7d}d)</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {org.lastActivity ? fmtDato(org.lastActivity) : (
+                            <span className="text-xs italic">Aldrig</span>
+                          )}
+                        </td>
+                        <td className="min-w-[180px] px-4 py-3">
+                          <InlineNoteEditor
+                            orgId={org.id}
+                            initialNote={localNotes[org.id]?.note ?? ""}
+                            savedAt={localNotes[org.id]?.created_at}
+                            accessToken={accessToken}
+                            onSaved={(note) =>
+                              setLocalNotes((prev) => ({
+                                ...prev,
+                                [org.id]: {
+                                  ...(prev[org.id] ?? {
+                                    id: "",
+                                    organization_id: org.id,
+                                    created_by: null,
+                                  }),
+                                  note,
+                                  created_at: new Date().toISOString(),
+                                },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setExpanded(isExpanded ? null : org.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs hover:bg-surface-elevated"
+                          >
+                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            {isExpanded ? "Luk" : "Detaljer"}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${org.id}-detail`} className="border-b border-border/30 bg-surface/30">
+                          <td colSpan={8} className="px-6 py-4">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                              {/* Onboarding checklist */}
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Onboarding-tjekliste
+                                </p>
+                                <ul className="space-y-1.5">
+                                  {Object.entries(org.onboarding).map(([key, done], idx) => (
+                                    <li key={key} className="flex items-center gap-2 text-sm">
+                                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${done ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>
+                                        {done ? "✓" : idx + 1}
+                                      </span>
+                                      <span className={done ? "" : "text-muted-foreground"}>
+                                        {ONBOARDING_LABELS[idx]}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              {/* Health score breakdown */}
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Sundhedsscore-fordeling
+                                </p>
+                                <div className="space-y-1.5 text-sm">
+                                  {[
+                                    { label: "Check-ins (7d)", pts: Math.min(org.checkins7d * 2, 40), max: 40 },
+                                    { label: "Aktive dage (7d)", pts: Math.round((org.activeDays7d / 7) * 20), max: 20 },
+                                    { label: "Antal personale", pts: Math.min(org.staffCount * 5, 20), max: 20 },
+                                    {
+                                      label: "Abonnementsstatus",
+                                      pts: org.subscription_status === "active" || org.subscription_status === "gratis" ? 20
+                                        : org.subscription_status === "trialing" ? 10
+                                        : org.subscription_status === "past_due" ? 5 : 0,
+                                      max: 20,
+                                    },
+                                  ].map((row) => (
+                                    <div key={row.label} className="flex items-center gap-3">
+                                      <span className="w-36 text-muted-foreground">{row.label}</span>
+                                      <div className="flex-1 overflow-hidden rounded-full bg-surface h-2">
+                                        <div
+                                          className="h-full bg-primary/60 rounded-full"
+                                          style={{ width: `${(row.pts / row.max) * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="w-12 text-right text-xs text-muted-foreground">
+                                        {row.pts}/{row.max}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  <div className="mt-1 flex items-center justify-between border-t border-border/50 pt-1.5">
+                                    <span className="font-medium">Total</span>
+                                    <span className={`font-bold ${hc.badge.split(" ")[1]}`}>
+                                      {org.healthScore}/100
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="mt-3 text-xs text-muted-foreground opacity-60">
+                                  Score baseret på aggregerede antal — ingen individuel brugeradfærd
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border/40 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
+        <StickyNote className="mb-0.5 mr-1.5 inline h-3.5 w-3.5" />
+        <strong>GDPR-note:</strong> Skriv kun organisatoriske noter — ingen personoplysninger
+        om børn, forældre eller individuelle brugere.
       </div>
     </div>
   );

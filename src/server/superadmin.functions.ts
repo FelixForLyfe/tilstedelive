@@ -708,6 +708,180 @@ export const superadminSaveOrgNote = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+// ─── Customer success data ────────────────────────────────────────────────────
+
+export type OrgHealthData = {
+  id: string;
+  name: string;
+  subscription_status: string;
+  subscription_tier: string;
+  created_at: string;
+  staffCount: number;
+  childCount: number;
+  checkins7d: number;
+  activeDays7d: number;
+  lastActivity: string | null;
+  onboarding: {
+    orgCreated: boolean;
+    staffAdded: boolean;
+    memberAdded: boolean;
+    checkinDone: boolean;
+    subscriptionActive: boolean;
+  };
+  onboardingScore: number;
+  healthScore: number;
+  healthColor: "green" | "yellow" | "red";
+  latestNote: OrgNote | null;
+};
+
+export const superadminGetCustomerSuccess = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const d7ago = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // All queries run in parallel — only aggregated counts returned, no personal data.
+    const [orgsRes, membersRes, childrenRes, recentCheckinsRes, lastActRes, notesRes] =
+      await Promise.all([
+        (supabaseAdmin as any)
+          .from("organizations")
+          .select("id, name, subscription_status, subscription_tier, created_at")
+          .order("created_at", { ascending: false }),
+
+        supabaseAdmin
+          .from("organization_members")
+          .select("organization_id")
+          .eq("status", "active"),
+
+        // children table: graceful fallback if table missing or has no is_active column
+        (supabaseAdmin as any)
+          .from("children")
+          .select("organization_id")
+          .then((r: any) => r)
+          .catch(() => ({ data: [] })),
+
+        // Check-ins last 7 days — only org_id + date for aggregation
+        supabaseAdmin
+          .from("attendance_records")
+          .select("organization_id, created_at")
+          .gte("created_at", d7ago),
+
+        // Last activity per org via our aggregate helper
+        (supabaseAdmin as any)
+          .rpc("superadmin_org_last_activity")
+          .then((r: any) => r)
+          .catch(() => ({ data: [] })),
+
+        // Latest CRM note per org
+        (supabaseAdmin as any)
+          .from("org_notes")
+          .select("id, organization_id, note, created_at, created_by")
+          .order("created_at", { ascending: false })
+          .limit(500)
+          .then((r: any) => r)
+          .catch(() => ({ data: [] })),
+      ]);
+
+    if (orgsRes.error) throw new Error(orgsRes.error.message);
+
+    // ── Build lookup maps ────────────────────────────────────────────────────
+
+    const staffByOrg: Record<string, number> = {};
+    for (const m of membersRes.data ?? []) {
+      staffByOrg[m.organization_id] = (staffByOrg[m.organization_id] ?? 0) + 1;
+    }
+
+    const childByOrg: Record<string, number> = {};
+    for (const c of childrenRes.data ?? []) {
+      childByOrg[(c as any).organization_id] = (childByOrg[(c as any).organization_id] ?? 0) + 1;
+    }
+    const childDataAvailable = (childrenRes.data ?? []).length > 0;
+
+    const checkins7dByOrg: Record<string, number> = {};
+    const activeDaysByOrg: Record<string, Set<string>> = {};
+    for (const r of recentCheckinsRes.data ?? []) {
+      const oid = r.organization_id as string;
+      checkins7dByOrg[oid] = (checkins7dByOrg[oid] ?? 0) + 1;
+      if (!activeDaysByOrg[oid]) activeDaysByOrg[oid] = new Set();
+      activeDaysByOrg[oid].add((r.created_at as string).slice(0, 10));
+    }
+
+    const lastActivityByOrg: Record<string, string> = {};
+    for (const row of lastActRes.data ?? []) {
+      lastActivityByOrg[(row as any).organization_id] = (row as any).last_activity;
+    }
+
+    const latestNoteByOrg: Record<string, OrgNote> = {};
+    for (const n of notesRes.data ?? []) {
+      if (!latestNoteByOrg[(n as any).organization_id]) {
+        latestNoteByOrg[(n as any).organization_id] = {
+          id: (n as any).id,
+          organization_id: (n as any).organization_id,
+          note: (n as any).note,
+          created_at: (n as any).created_at,
+          created_by: (n as any).created_by ?? null,
+        };
+      }
+    }
+
+    // ── Compute per-org health data ──────────────────────────────────────────
+
+    const result: OrgHealthData[] = (orgsRes.data ?? []).map((org: any) => {
+      const staff = staffByOrg[org.id] ?? 0;
+      const children = childByOrg[org.id] ?? 0;
+      const ci7d = checkins7dByOrg[org.id] ?? 0;
+      const ad7d = activeDaysByOrg[org.id]?.size ?? 0;
+      const lastAct = lastActivityByOrg[org.id] ?? null;
+      const hasCheckin = !!lastAct;
+      const isActiveSub =
+        org.subscription_status === "active" || org.subscription_status === "gratis";
+
+      const onboarding = {
+        orgCreated: true,
+        staffAdded: staff > 0,
+        // Fall back to checkinDone as proxy if children table is empty/absent
+        memberAdded: childDataAvailable ? children > 0 : hasCheckin,
+        checkinDone: hasCheckin,
+        subscriptionActive: isActiveSub,
+      };
+
+      // Health score 0–100 (aggregated counts only — no individual behaviour)
+      const checkinsScore = Math.min(ci7d * 2, 40);      // 0–40
+      const activeDaysScore = Math.round((ad7d / 7) * 20); // 0–20
+      const staffScore = Math.min(staff * 5, 20);           // 0–20
+      const subScore =
+        isActiveSub ? 20 :
+        org.subscription_status === "trialing" ? 10 :
+        org.subscription_status === "past_due" ? 5 : 0;    // 0–20
+
+      const healthScore = checkinsScore + activeDaysScore + staffScore + subScore;
+      const healthColor: "green" | "yellow" | "red" =
+        healthScore >= 70 ? "green" : healthScore >= 40 ? "yellow" : "red";
+
+      return {
+        id: org.id as string,
+        name: org.name as string,
+        subscription_status: org.subscription_status as string,
+        subscription_tier: org.subscription_tier as string,
+        created_at: org.created_at as string,
+        staffCount: staff,
+        childCount: children,
+        checkins7d: ci7d,
+        activeDays7d: ad7d,
+        lastActivity: lastAct,
+        onboarding,
+        onboardingScore: Object.values(onboarding).filter(Boolean).length,
+        healthScore,
+        healthColor,
+        latestNote: latestNoteByOrg[org.id] ?? null,
+      };
+    });
+
+    // Sort worst health first so problems surface at the top
+    return result.sort((a, b) => a.healthScore - b.healthScore);
+  });
+
 export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z
