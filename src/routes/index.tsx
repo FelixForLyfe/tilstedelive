@@ -94,7 +94,7 @@ function Forside() {
           <Link to="/priser" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Priser</Link>
           <Link to="/login/personale" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Log ind</Link>
           <Link to="/signup" className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90">
-            Opret gratis
+            Start gratis prøveperiode
           </Link>
         </div>
       </header>
@@ -121,7 +121,7 @@ function Forside() {
             to="/signup"
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:scale-[1.02]"
           >
-            Opret organisation gratis <ChevronRight className="h-4 w-4" />
+            Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             to="/login/personale"
@@ -133,7 +133,7 @@ function Forside() {
 
         {/* Trust badges */}
         <div className="mx-auto mt-10 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
-          {["Gratis at starte", "Ingen kreditkort krævet", "GDPR-compliant", "Dansk support"].map((t) => (
+          {["30 dages gratis prøveperiode", "Ingen kreditkort krævet", "GDPR-compliant", "Dansk support"].map((t) => (
             <span key={t} className="flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" /> {t}
             </span>
@@ -224,14 +224,14 @@ function Forside() {
         <div className="glass rounded-3xl p-10 text-center shadow-card">
           <h2 className="font-display text-3xl font-bold">Klar til at komme i gang?</h2>
           <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-            Opret din organisation på under 2 minutter. Gratis at starte, ingen kreditkort krævet.
+            Opret din organisation på under 2 minutter og få 30 dages fuld adgang — ingen kreditkort krævet.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
               to="/signup"
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
             >
-              Opret organisation gratis <ChevronRight className="h-4 w-4" />
+              Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
             </Link>
             <Link
               to="/priser"

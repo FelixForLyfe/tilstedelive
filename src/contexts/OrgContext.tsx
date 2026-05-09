@@ -7,8 +7,17 @@ export type Medlemskab = {
   organization_id: string;
   role: "admin" | "employee";
   status: "active" | "pending";
-  organizations: { id: string; name: string; org_type: OrgType | null } | null;
+  organizations: {
+    id: string;
+    name: string;
+    org_type: OrgType | null;
+    subscription_status: string | null;
+    subscription_tier: string | null;
+    trial_ends_at: string | null;
+  } | null;
 };
+
+export type BlockReason = "trial_expired" | "canceled" | "past_due" | null;
 
 type OrgCtx = {
   medlemskaber: Medlemskab[];
@@ -17,6 +26,12 @@ type OrgCtx = {
   erAdmin: boolean;
   orgType: OrgType | null;
   terms: Terms;
+  subscriptionStatus: string | null;
+  subscriptionTier: string | null;
+  trialEndsAt: string | null;
+  trialDaysLeft: number | null;
+  isBlocked: boolean;
+  blockReason: BlockReason;
   vaelgOrg: (id: string) => void;
   genindlaes: () => Promise<void>;
   loading: boolean;
@@ -27,6 +42,8 @@ const defaultTerms = getTerms(null);
 const Ctx = createContext<OrgCtx>({
   medlemskaber: [], aktivOrgId: null, aktivOrg: null, erAdmin: false,
   orgType: null, terms: defaultTerms,
+  subscriptionStatus: null, subscriptionTier: null, trialEndsAt: null,
+  trialDaysLeft: null, isBlocked: false, blockReason: null,
   vaelgOrg: () => {}, genindlaes: async () => {}, loading: true,
 });
 
@@ -46,7 +63,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const { data, error } = await supabase
       .from("organization_members")
-      .select("organization_id, role, status, organizations(id, name, org_type)")
+      .select("organization_id, role, status, organizations(id, name, org_type, subscription_status, subscription_tier, trial_ends_at)")
       .eq("user_id", user.id)
       .eq("status", "active");
     if (error) { console.error(error); setLoading(false); return; }
@@ -73,8 +90,37 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const orgType = (aktivOrg?.organizations?.org_type ?? null) as OrgType | null;
   const terms = getTerms(orgType);
 
+  const subscriptionStatus = aktivOrg?.organizations?.subscription_status ?? null;
+  const subscriptionTier = aktivOrg?.organizations?.subscription_tier ?? null;
+  const trialEndsAt = aktivOrg?.organizations?.trial_ends_at ?? null;
+
+  const trialDaysLeft = (subscriptionStatus === "trialing" && trialEndsAt)
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  let isBlocked = false;
+  let blockReason: BlockReason = null;
+
+  if (aktivOrg !== null && !loading) {
+    const trialExpired = subscriptionStatus === "trialing" && trialEndsAt !== null && new Date(trialEndsAt) <= new Date();
+    if (trialExpired) {
+      isBlocked = true;
+      blockReason = "trial_expired";
+    } else if (subscriptionStatus === "canceled" || subscriptionStatus === "expired") {
+      isBlocked = true;
+      blockReason = "canceled";
+    } else if (subscriptionStatus === "past_due") {
+      isBlocked = true;
+      blockReason = "past_due";
+    }
+  }
+
   return (
-    <Ctx.Provider value={{ medlemskaber, aktivOrgId, aktivOrg, erAdmin, orgType, terms, vaelgOrg, genindlaes: indlaes, loading }}>
+    <Ctx.Provider value={{
+      medlemskaber, aktivOrgId, aktivOrg, erAdmin, orgType, terms,
+      subscriptionStatus, subscriptionTier, trialEndsAt, trialDaysLeft, isBlocked, blockReason,
+      vaelgOrg, genindlaes: indlaes, loading,
+    }}>
       {children}
     </Ctx.Provider>
   );

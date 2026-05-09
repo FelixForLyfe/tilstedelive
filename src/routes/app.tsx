@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
-
-import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrg } from "@/contexts/OrgContext";
+import { useOrg, type BlockReason } from "@/contexts/OrgContext";
+import { createBillingPortalSession } from "@/server/stripe.functions";
 
 export const Route = createFileRoute("/app")({
   beforeLoad: async () => {
@@ -22,17 +25,123 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 });
 
+function TrialBanner({ daysLeft }: { daysLeft: number }) {
+  const urgent = daysLeft <= 3;
+  return (
+    <div className={`px-4 py-2.5 text-center text-sm font-medium ${
+      urgent
+        ? "bg-destructive/10 border-b border-destructive/20 text-destructive"
+        : "bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-400"
+    }`}>
+      {urgent ? "⚠️" : "⏳"}{" "}
+      Du har <strong>{daysLeft} {daysLeft === 1 ? "dag" : "dage"}</strong> tilbage af din gratis prøveperiode.{" "}
+      <Link to="/priser" className="underline hover:opacity-80">Vælg en plan →</Link>
+    </div>
+  );
+}
+
+function Paywall({
+  reason,
+  erAdmin,
+  onBillingPortal,
+  billingLoading,
+}: {
+  reason: BlockReason;
+  erAdmin: boolean;
+  onBillingPortal: () => Promise<void>;
+  billingLoading: boolean;
+}) {
+  return (
+    <div className="flex min-h-[70vh] items-center justify-center px-4">
+      <div className="glass w-full max-w-lg rounded-3xl p-10 text-center shadow-card fade-in">
+        {reason === "trial_expired" && (
+          <>
+            <div className="mb-4 text-5xl">⏰</div>
+            <h2 className="font-display text-2xl font-bold">Din prøveperiode er udløbet</h2>
+            <p className="mt-3 text-muted-foreground">
+              Din 30 dages gratis prøveperiode er slut. Vælg en plan for at fortsætte med at bruge Tilstede.
+            </p>
+          </>
+        )}
+        {reason === "canceled" && (
+          <>
+            <div className="mb-4 text-5xl">📋</div>
+            <h2 className="font-display text-2xl font-bold">Abonnement opsagt</h2>
+            <p className="mt-3 text-muted-foreground">
+              Dit abonnement er blevet opsagt. Vælg en ny plan for at genaktivere din adgang.
+            </p>
+          </>
+        )}
+        {reason === "past_due" && (
+          <>
+            <div className="mb-4 text-5xl">💳</div>
+            <h2 className="font-display text-2xl font-bold">Betaling mislykkedes</h2>
+            <p className="mt-3 text-muted-foreground">
+              Vi kunne ikke trække betaling for dit abonnement. Opdater din betalingsmetode for at genoprette adgangen.
+            </p>
+          </>
+        )}
+
+        {erAdmin ? (
+          <div className="mt-8 flex flex-col items-center gap-3">
+            {reason === "past_due" ? (
+              <button
+                onClick={onBillingPortal}
+                disabled={billingLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
+              >
+                <CreditCard className="h-4 w-4" />
+                {billingLoading ? "Åbner…" : "Opdater betalingsoplysninger"}
+              </button>
+            ) : (
+              <Link
+                to="/priser"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
+              >
+                Se planer og priser <ChevronRight className="h-4 w-4" />
+              </Link>
+            )}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-muted-foreground">
+            Kontakt din administrator for at genoprette adgangen.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AppLayout() {
-  const { user, logUd } = useAuth();
-  const { medlemskaber, aktivOrg, aktivOrgId, vaelgOrg, erAdmin, loading } = useOrg();
+  const { user, logUd, session } = useAuth();
+  const { medlemskaber, aktivOrg, aktivOrgId, vaelgOrg, erAdmin, loading, trialDaysLeft, isBlocked, blockReason } = useOrg();
   const navigate = useNavigate();
   const path = useRouterState({ select: (r) => r.location.pathname });
-
-  // Begge roller (admin + personale) lander på status-siden, hvor man tjekker børn ind/ud.
+  const openBillingPortal = useServerFn(createBillingPortalSession);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const handleLogout = async () => {
     await logUd();
     navigate({ to: "/" });
+  };
+
+  const handleBillingPortal = async () => {
+    if (!session || !aktivOrgId) return;
+    setBillingLoading(true);
+    try {
+      const result = await openBillingPortal({
+        data: {
+          orgId: aktivOrgId,
+          accessToken: session.access_token,
+          returnUrl: window.location.href,
+        },
+      });
+      if (result?.url) window.location.href = result.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Noget gik galt. Prøv igen.");
+    } finally {
+      setBillingLoading(false);
+    }
   };
 
   const navItems = [
@@ -111,8 +220,21 @@ function AppLayout() {
         </div>
       </header>
 
+      {trialDaysLeft !== null && !isBlocked && (
+        <TrialBanner daysLeft={trialDaysLeft} />
+      )}
+
       <main className="container mx-auto px-4 py-6 fade-in">
-        <Outlet />
+        {isBlocked ? (
+          <Paywall
+            reason={blockReason}
+            erAdmin={erAdmin}
+            onBillingPortal={handleBillingPortal}
+            billingLoading={billingLoading}
+          />
+        ) : (
+          <Outlet />
+        )}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/90 backdrop-blur-xl">

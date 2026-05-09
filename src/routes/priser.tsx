@@ -282,6 +282,10 @@ function PriserSide() {
         <div className="mx-auto max-w-2xl space-y-4">
           {[
             {
+              q: "Hvad sker der efter prøveperioden?",
+              a: "Når de 30 dage er gået, spærres adgang til appen. Du vælger en plan og betaler via Stripe — herefter åbnes adgangen med det samme. Dine data og historik er bevaret.",
+            },
+            {
               q: "Kan jeg skifte plan undervejs?",
               a: "Ja, du kan opgradere eller nedgradere når som helst via Stripe-portalen. Ændringen træder i kraft med det samme.",
             },
@@ -311,13 +315,13 @@ function PriserSide() {
         <div className="glass rounded-3xl p-10 text-center shadow-card">
           <h2 className="font-display text-3xl font-bold">Start gratis i dag</h2>
           <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-            Opret din organisation og prøv alle funktioner. Ingen kreditkort krævet.
+            Opret din organisation og prøv alle funktioner i 30 dage. Ingen kreditkort krævet.
           </p>
           <Link
             to="/signup"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
           >
-            Opret organisation gratis <ChevronRight className="h-4 w-4" />
+            Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
