@@ -22,21 +22,46 @@ async function verifySuperadmin(accessToken: string) {
   return user;
 }
 
+// Silent audit — never throws, so a missing column won't break a panel action.
 async function auditLog(
   userId: string,
   event: string,
   orgId?: string | null,
   meta?: Record<string, unknown>,
 ) {
-  await (supabaseAdmin as any).from("audit_logs").insert({
-    user_id: userId,
-    action: "INSERT",
-    action_type: "superadmin_action",
-    table_name: "superadmin",
-    record_id: null,
-    org_id: orgId ?? null,
-    metadata: { event, ...meta },
-  });
+  try {
+    await (supabaseAdmin as any).from("audit_logs").insert({
+      user_id: userId,
+      action: "INSERT",
+      action_type: "superadmin_action",
+      table_name: "superadmin",
+      record_id: null,
+      org_id: orgId ?? null,
+      metadata: { event, ...meta },
+    });
+  } catch {
+    // audit failure is non-fatal
+  }
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function isMissingColumn(err: any): boolean {
+  return (
+    typeof err?.message === "string" &&
+    (err.message.includes("does not exist") ||
+      err.message.includes("column") ||
+      err.code === "42703")
+  );
+}
+
+function isMissingTable(err: any): boolean {
+  return (
+    typeof err?.message === "string" &&
+    (err.message.includes("relation") ||
+      err.message.includes("does not exist") ||
+      err.code === "42P01")
+  );
 }
 
 // ─── List all organisations ───────────────────────────────────────────────────
@@ -47,18 +72,45 @@ export const superadminListOrgs = createServerFn({ method: "POST" })
     const user = await verifySuperadmin(data.accessToken);
     await auditLog(user.id, "SUPERADMIN_VISIT");
 
-    const { data: orgs, error } = await (supabaseAdmin as any)
+    // Try full select (includes gratis_reason added in migration 20260509220000)
+    const full = await (supabaseAdmin as any)
       .from("organizations")
       .select(
         "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id, gratis_reason",
       )
       .order("created_at", { ascending: false });
 
-    if (error) throw new Error(error.message);
-    return orgs ?? [];
+    // Fall back without gratis_reason if column not yet migrated
+    if (full.error && isMissingColumn(full.error)) {
+      const base = await (supabaseAdmin as any)
+        .from("organizations")
+        .select(
+          "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id",
+        )
+        .order("created_at", { ascending: false });
+      if (base.error) throw new Error(base.error.message);
+      return (base.data ?? []).map((o: any) => ({ ...o, gratis_reason: null }));
+    }
+
+    if (full.error) throw new Error(full.error.message);
+    return (full.data ?? []).map((o: any) => ({ ...o, gratis_reason: o.gratis_reason ?? null }));
   });
 
-// ─── Update org subscription (tier / trial date) ──────────────────────────────
+// ─── Lightweight org list for dropdowns ──────────────────────────────────────
+
+export const superadminListOrgNames = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+    const { data: orgs, error } = await supabaseAdmin
+      .from("organizations")
+      .select("id, name")
+      .order("name");
+    if (error) throw new Error(error.message);
+    return (orgs ?? []) as { id: string; name: string }[];
+  });
+
+// ─── Update org subscription (tier) ──────────────────────────────────────────
 
 const TIERS = ["gratis", "basis", "pro", "organisation", "kommune", "special"] as const;
 const STATUSES = ["active", "past_due", "canceled", "trialing", "expired", "gratis"] as const;
@@ -91,7 +143,6 @@ export const superadminUpdateOrg = createServerFn({ method: "POST" })
       .eq("id", data.orgId);
 
     if (error) throw new Error(error.message);
-
     await auditLog(user.id, "SUPERADMIN_UPDATE_ORG", data.orgId, { patch });
     return { success: true };
   });
@@ -114,7 +165,7 @@ export const superadminExtendTrial = createServerFn({ method: "POST" })
 
     const { data: org } = await (supabaseAdmin as any)
       .from("organizations")
-      .select("trial_ends_at, subscription_status")
+      .select("trial_ends_at")
       .eq("id", data.orgId)
       .single();
 
@@ -186,35 +237,37 @@ export const superadminGetDashboard = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await verifySuperadmin(data.accessToken);
 
-    const [
-      { data: orgs },
-      { data: members },
-      { count: totalAttendance },
-      { count: totalTimeLogs },
-    ] = await Promise.all([
-      (supabaseAdmin as any)
+    // Orgs — try with gratis_reason, fall back without
+    const orgsResult = await (async () => {
+      const r = await (supabaseAdmin as any)
         .from("organizations")
         .select("id, name, org_type, subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, created_at, gratis_reason")
-        .order("created_at", { ascending: false }),
-      supabaseAdmin
-        .from("organization_members")
-        .select("organization_id, user_id")
-        .eq("status", "active"),
-      supabaseAdmin
-        .from("attendance_records")
-        .select("*", { count: "exact", head: true }),
-      supabaseAdmin
-        .from("employee_time_logs")
-        .select("*", { count: "exact", head: true }),
-    ]);
+        .order("created_at", { ascending: false });
+      if (r.error && isMissingColumn(r.error)) {
+        const fb = await (supabaseAdmin as any)
+          .from("organizations")
+          .select("id, name, org_type, subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, created_at")
+          .order("created_at", { ascending: false });
+        return { data: (fb.data ?? []).map((o: any) => ({ ...o, gratis_reason: null })), error: fb.error };
+      }
+      return r;
+    })();
 
-    // Org → member count map
+    const [{ data: members }, { count: totalAttendance }, { count: totalTimeLogs }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("organization_members")
+          .select("organization_id, user_id")
+          .eq("status", "active"),
+        supabaseAdmin.from("attendance_records").select("*", { count: "exact", head: true }),
+        supabaseAdmin.from("employee_time_logs").select("*", { count: "exact", head: true }),
+      ]);
+
     const orgMemberCounts: Record<string, number> = {};
     for (const m of members ?? []) {
       orgMemberCounts[m.organization_id] = (orgMemberCounts[m.organization_id] ?? 0) + 1;
     }
 
-    // Monthly costs (last 24 months)
     let costs: unknown[] = [];
     try {
       const { data: c } = await (supabaseAdmin as any)
@@ -224,11 +277,11 @@ export const superadminGetDashboard = createServerFn({ method: "POST" })
         .limit(24);
       costs = c ?? [];
     } catch {
-      // table may not exist in older environments
+      // monthly_costs table may not exist yet
     }
 
     return {
-      orgs: (orgs ?? []) as DashboardOrg[],
+      orgs: (orgsResult.data ?? []) as DashboardOrg[],
       orgMemberCounts,
       totalMembers: (members ?? []).length,
       totalAttendanceRecords: totalAttendance ?? 0,
@@ -237,7 +290,6 @@ export const superadminGetDashboard = createServerFn({ method: "POST" })
     };
   });
 
-// Re-export these types so the route can import them
 export type DashboardOrg = {
   id: string;
   name: string;
@@ -265,7 +317,7 @@ export const superadminSaveMonthlyCosts = createServerFn({ method: "POST" })
     z
       .object({
         accessToken: z.string().min(1),
-        month: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato (forventet YYYY-MM-DD)"),
+        month: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato"),
         costs: z
           .array(
             z.object({
@@ -377,6 +429,8 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
       .select("id, code, plan_type, used, used_at, created_at, used_by, organizations(name)")
       .order("created_at", { ascending: false });
 
+    // Table missing — migration 20260509200000 not yet applied
+    if (error && isMissingTable(error)) return [];
     if (error) throw new Error(error.message);
 
     return (keys ?? []).map((k: any) => ({
@@ -419,17 +473,19 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
         plan_type: data.planType,
         created_by: user.id,
       });
-      if (!error) { inserted = true; break; }
+      if (!error) {
+        inserted = true;
+        break;
+      }
+      if (isMissingTable(error)) {
+        throw new Error("plan_keys-tabellen eksisterer ikke endnu. Kør migration 20260509200000.");
+      }
       if (error.code !== "23505") throw new Error(error.message);
       code = generateCode();
     }
     if (!inserted) throw new Error("Kunne ikke generere unik nøgle. Prøv igen.");
 
-    await auditLog(user.id, "SUPERADMIN_GENERATE_KEY", null, {
-      code,
-      plan_type: data.planType,
-    });
-
+    await auditLog(user.id, "SUPERADMIN_GENERATE_KEY", null, { code, plan_type: data.planType });
     return { code };
   });
 
@@ -440,20 +496,30 @@ export const superadminListAuditLog = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await verifySuperadmin(data.accessToken);
 
-    const { data: logs, error } = await (supabaseAdmin as any)
+    // Try with action_type filter (requires migration 20260509200000)
+    const result = await (supabaseAdmin as any)
       .from("audit_logs")
       .select("id, created_at, user_id, action, org_id, metadata")
       .eq("action_type", "superadmin_action")
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (error) throw new Error(error.message);
+    // action_type column not migrated yet — return recent logs without filter
+    let logs: any[] = [];
+    if (result.error && isMissingColumn(result.error)) {
+      const fb = await (supabaseAdmin as any)
+        .from("audit_logs")
+        .select("id, created_at, user_id, action, org_id")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      logs = fb.data ?? [];
+    } else if (result.error) {
+      throw new Error(result.error.message);
+    } else {
+      logs = result.data ?? [];
+    }
 
-    const orgIds = [
-      ...new Set(
-        (logs ?? []).filter((l: any) => l.org_id).map((l: any) => l.org_id as string),
-      ),
-    ];
+    const orgIds = [...new Set(logs.filter((l) => l.org_id).map((l) => l.org_id as string))];
     let orgMap: Record<string, string> = {};
     if (orgIds.length > 0) {
       const { data: orgs } = await supabaseAdmin
@@ -463,11 +529,135 @@ export const superadminListAuditLog = createServerFn({ method: "POST" })
       orgMap = Object.fromEntries((orgs ?? []).map((o) => [o.id, o.name]));
     }
 
-    return (logs ?? []).map((l: any) => ({
+    return logs.map((l: any) => ({
       id: l.id as string,
       createdAt: l.created_at as string,
       event: (l.metadata?.event ?? l.action) as string,
       orgName: l.org_id ? (orgMap[l.org_id] ?? "Ukendt org") : null,
-      metadata: l.metadata as Record<string, unknown> | null,
+      metadata: (l.metadata ?? null) as Record<string, unknown> | null,
     }));
+  });
+
+// ─── Custom plans ─────────────────────────────────────────────────────────────
+
+export type CustomPlan = {
+  id: string;
+  organization_id: string;
+  org_name: string | null;
+  name: string;
+  price_dkk: number;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: string;
+  created_at: string;
+};
+
+const CUSTOM_PLAN_STATUSES = ["active", "expired", "cancelled"] as const;
+
+export const superadminListCustomPlans = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const { data: plans, error } = await (supabaseAdmin as any)
+      .from("custom_plans")
+      .select("id, organization_id, name, price_dkk, description, start_date, end_date, status, created_at, organizations(name)")
+      .order("created_at", { ascending: false });
+
+    if (error && isMissingTable(error)) return [] as CustomPlan[];
+    if (error) throw new Error(error.message);
+
+    return (plans ?? []).map((p: any) => ({
+      id: p.id as string,
+      organization_id: p.organization_id as string,
+      org_name: (p.organizations?.name ?? null) as string | null,
+      name: p.name as string,
+      price_dkk: p.price_dkk as number,
+      description: (p.description ?? null) as string | null,
+      start_date: p.start_date as string,
+      end_date: (p.end_date ?? null) as string | null,
+      status: p.status as string,
+      created_at: p.created_at as string,
+    })) as CustomPlan[];
+  });
+
+export const superadminCreateCustomPlan = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        organizationId: z.string().uuid(),
+        name: z.string().trim().min(1, "Plannavn er påkrævet"),
+        price_dkk: z.number().int().min(0),
+        description: z.string().trim().optional(),
+        start_date: z.string().min(1, "Startdato er påkrævet"),
+        end_date: z.string().nullable().optional(),
+        status: z.enum(CUSTOM_PLAN_STATUSES).default("active"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { error } = await (supabaseAdmin as any).from("custom_plans").insert({
+      organization_id: data.organizationId,
+      name: data.name,
+      price_dkk: data.price_dkk,
+      description: data.description ?? null,
+      start_date: data.start_date,
+      end_date: data.end_date ?? null,
+      status: data.status,
+      created_by: admin.id,
+    });
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_CREATE_CUSTOM_PLAN", data.organizationId, {
+      plan_name: data.name,
+      price_dkk: data.price_dkk,
+      start_date: data.start_date,
+    });
+
+    return { success: true };
+  });
+
+export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        planId: z.string().uuid(),
+        name: z.string().trim().min(1),
+        price_dkk: z.number().int().min(0),
+        description: z.string().trim().optional(),
+        start_date: z.string().min(1),
+        end_date: z.string().nullable().optional(),
+        status: z.enum(CUSTOM_PLAN_STATUSES),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { error } = await (supabaseAdmin as any)
+      .from("custom_plans")
+      .update({
+        name: data.name,
+        price_dkk: data.price_dkk,
+        description: data.description ?? null,
+        start_date: data.start_date,
+        end_date: data.end_date ?? null,
+        status: data.status,
+      })
+      .eq("id", data.planId);
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_UPDATE_CUSTOM_PLAN", null, {
+      plan_id: data.planId,
+      new_status: data.status,
+    });
+
+    return { success: true };
   });

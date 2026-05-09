@@ -22,6 +22,8 @@ import {
   Minus,
   Pencil,
   Save,
+  Layers,
+  CalendarDays,
 } from "lucide-react";
 import {
   BarChart,
@@ -45,8 +47,13 @@ import {
   superadminListPlanKeys,
   superadminGeneratePlanKey,
   superadminListAuditLog,
+  superadminListCustomPlans,
+  superadminCreateCustomPlan,
+  superadminUpdateCustomPlan,
+  superadminListOrgNames,
   type DashboardOrg,
   type MonthlyCost,
+  type CustomPlan,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -161,6 +168,20 @@ const EVENT_LABELS: Record<string, string> = {
   SUPERADMIN_DELETE_USER: "Slettede bruger",
   SUPERADMIN_GENERATE_KEY: "Genererede plan-nøgle",
   SUPERADMIN_SAVE_COSTS: "Gemte månedlige omkostninger",
+  SUPERADMIN_CREATE_CUSTOM_PLAN: "Oprettede misc. plan",
+  SUPERADMIN_UPDATE_CUSTOM_PLAN: "Opdaterede misc. plan",
+};
+
+const CUSTOM_PLAN_STATUS_LABELS: Record<string, string> = {
+  active: "Aktiv",
+  expired: "Udløbet",
+  cancelled: "Annulleret",
+};
+
+const CUSTOM_PLAN_STATUS_COLORS: Record<string, string> = {
+  active: "bg-success/15 text-success",
+  expired: "bg-muted text-muted-foreground",
+  cancelled: "bg-destructive/15 text-destructive",
 };
 
 const TABS = [
@@ -168,6 +189,7 @@ const TABS = [
   { id: "orgs", label: "Organisationer", icon: Building2 },
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
+  { id: "misc", label: "Misc. Planer", icon: Layers },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -288,6 +310,7 @@ function SuperadminPanel() {
         )}
         {activeTab === "users" && <UsersTab accessToken={accessToken} />}
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
+        {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -1264,6 +1287,379 @@ function KeysTab({ accessToken }: { accessToken: string }) {
   );
 }
 
+// ─── Misc. Planer tab ─────────────────────────────────────────────────────────
+
+type OrgName = { id: string; name: string };
+
+function MiscPlansTab({ accessToken }: { accessToken: string }) {
+  const [plans, setPlans] = useState<CustomPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editTarget, setEditTarget] = useState<CustomPlan | null>(null);
+  const [soeg, setSoeg] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await superadminListCustomPlans({ data: { accessToken } });
+      setPlans(data as CustomPlan[]);
+    } catch {
+      toast.error("Kunne ikke indlæse misc. planer");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtrede = soeg
+    ? plans.filter(p =>
+        (p.org_name ?? "").toLowerCase().includes(soeg.toLowerCase()) ||
+        p.name.toLowerCase().includes(soeg.toLowerCase())
+      )
+    : plans;
+
+  const activePlans = plans.filter(p => p.status === "active");
+  const totalMRRMisc = activePlans.reduce((s, p) => s + p.price_dkk, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Misc. Planer</h2>
+          <p className="text-sm text-muted-foreground">
+            {plans.length} planer · {activePlans.length} aktive · MRR: {fmtKr(totalMRRMisc)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Opdater
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
+            <Plus className="h-4 w-4" /> Ny plan
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border/50 bg-surface/30 p-3 text-xs text-muted-foreground">
+        <strong>Misc. planer</strong> er skræddersyede aftaler med specifikke organisationer — fx partnere, kommuner eller NGO'er med særlige betingelser der ikke passer i standard-planerne.
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={soeg}
+          onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg organisation eller plan…"
+          className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
+        />
+      </div>
+
+      <div className="glass overflow-hidden rounded-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3 text-left">Organisation</th>
+                <th className="px-4 py-3 text-left">Plannavn</th>
+                <th className="px-4 py-3 text-right">Pris/md</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Periode</th>
+                <th className="px-4 py-3 text-left">Oprettet</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Indlæser…</td></tr>
+              ) : filtrede.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                    <Layers className="mx-auto mb-3 h-8 w-8 opacity-30" />
+                    {soeg ? "Ingen planer matcher søgningen" : "Ingen misc. planer endnu. Klik \"Ny plan\" for at oprette den første."}
+                  </td>
+                </tr>
+              ) : (
+                filtrede.map((p, i) => (
+                  <tr key={p.id} className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""}`}>
+                    <td className="px-4 py-3 font-medium">{p.org_name ?? <span className="text-muted-foreground italic">–</span>}</td>
+                    <td className="px-4 py-3">
+                      {p.name}
+                      {p.description && (
+                        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{p.description}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold">
+                      {p.price_dkk > 0 ? fmtKr(p.price_dkk) : <span className="text-muted-foreground">0 kr.</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CUSTOM_PLAN_STATUS_COLORS[p.status] ?? "bg-muted text-muted-foreground"}`}>
+                        {CUSTOM_PLAN_STATUS_LABELS[p.status] ?? p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3 shrink-0" />
+                        {fmtDato(p.start_date)}
+                        {p.end_date ? ` → ${fmtDato(p.end_date)}` : " →"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{fmtDato(p.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setEditTarget(p)}
+                        className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated"
+                      >
+                        Rediger
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showCreate && (
+        <CustomPlanModal
+          accessToken={accessToken}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { setShowCreate(false); load(); }}
+        />
+      )}
+
+      {editTarget && (
+        <CustomPlanModal
+          accessToken={accessToken}
+          plan={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { setEditTarget(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Custom plan modal (create + edit) ───────────────────────────────────────
+
+function CustomPlanModal({
+  accessToken,
+  plan,
+  onClose,
+  onSaved,
+}: {
+  accessToken: string;
+  plan?: CustomPlan;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!plan;
+
+  const [orgNames, setOrgNames] = useState<OrgName[]>([]);
+  const [orgId, setOrgId] = useState(plan?.organization_id ?? "");
+  const [name, setName] = useState(plan?.name ?? "");
+  const [priceDkk, setPriceDkk] = useState(plan?.price_dkk ?? 0);
+  const [description, setDescription] = useState(plan?.description ?? "");
+  const [startDate, setStartDate] = useState(plan?.start_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(plan?.end_date?.slice(0, 10) ?? "");
+  const [status, setStatus] = useState(plan?.status ?? "active");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    superadminListOrgNames({ data: { accessToken } })
+      .then((d) => {
+        setOrgNames(d as OrgName[]);
+        if (!isEdit && d.length > 0 && !orgId) setOrgId((d[0] as OrgName).id);
+      })
+      .catch(() => {});
+  }, [accessToken, isEdit, orgId]);
+
+  const canSave = orgId && name.trim().length >= 2 && startDate;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      if (isEdit && plan) {
+        await superadminUpdateCustomPlan({
+          data: {
+            accessToken,
+            planId: plan.id,
+            name: name.trim(),
+            price_dkk: priceDkk,
+            description: description.trim() || undefined,
+            start_date: startDate,
+            end_date: endDate || undefined,
+            status: status as any,
+          },
+        });
+        toast.success("Plan opdateret");
+      } else {
+        await superadminCreateCustomPlan({
+          data: {
+            accessToken,
+            organization_id: orgId,
+            name: name.trim(),
+            price_dkk: priceDkk,
+            description: description.trim() || undefined,
+            start_date: startDate,
+            end_date: endDate || undefined,
+          },
+        });
+        toast.success("Plan oprettet");
+      }
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme plan");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="glass w-full max-w-lg space-y-4 rounded-t-3xl p-5 sm:rounded-3xl"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {isEdit ? "Rediger" : "Opret"} misc. plan
+            </p>
+            <h3 className="font-display text-lg font-bold">
+              {isEdit ? plan!.name : "Ny bespoke plan"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {!isEdit && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Organisation <span className="text-destructive">*</span>
+              </label>
+              <select
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+              >
+                {orgNames.length === 0 && <option value="">Indlæser…</option>}
+                {orgNames.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Plannavn <span className="text-destructive">*</span>
+            </label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Fx: Partner-aftale 2026, NGO-rabat, Skole-pakke…"
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Pris pr. måned (DKK)</label>
+            <input
+              type="number"
+              min={0}
+              value={priceDkk}
+              onChange={(e) => setPriceDkk(parseInt(e.target.value) || 0)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Sæt til 0 for gratis/non-profit aftaler.</p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Beskrivelse (valgfri)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Aftalens vilkår, kontaktperson, kontraktreference…"
+              className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Startdato <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Slutdato (valgfri)</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {isEdit && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+              >
+                {Object.entries(CUSTOM_PLAN_STATUS_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-border bg-surface py-2 text-sm font-medium hover:bg-surface-elevated"
+          >
+            Annullér
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !canSave}
+            className="flex-1 rounded-xl bg-gradient-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? "Gemmer…" : isEdit ? "Gem ændringer" : "Opret plan"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Handlingslog tab ─────────────────────────────────────────────────────────
 
 function LogTab({ accessToken }: { accessToken: string }) {
@@ -1324,7 +1720,7 @@ function LogTab({ accessToken }: { accessToken: string }) {
                             {expanded === e.id ? "Skjul" : "Vis"}
                           </button>
                         )}
-                        {e.event === "SUPERADMIN_DELETE_USER" && e.metadata?.reason && (
+                        {e.event === "SUPERADMIN_DELETE_USER" && !!(e.metadata?.reason) && (
                           <span className="text-xs text-muted-foreground"> · {String(e.metadata.reason).slice(0, 50)}{String(e.metadata.reason).length > 50 ? "…" : ""}</span>
                         )}
                       </td>
