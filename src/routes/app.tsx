@@ -14,12 +14,12 @@ export const Route = createFileRoute("/app")({
     const { data } = await supabase.auth.getSession();
     if (!data.session) throw redirect({ to: "/login" });
 
+    // Only enforce 2FA verification when the user has enrolled a factor (nextLevel = aal2)
+    // but hasn't verified it in this session yet.
+    // Do NOT redirect to setup-2fa here — aal1/aal1 is the normal state for users without MFA.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
       throw redirect({ to: "/verify-2fa" });
-    }
-    if (aal?.nextLevel === "aal1" && aal.currentLevel === "aal1") {
-      throw redirect({ to: "/setup-2fa" });
     }
   },
   component: AppLayout,
