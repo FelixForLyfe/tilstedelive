@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Sparkles,
@@ -14,8 +14,10 @@ import {
   Loader2,
   Mail,
   Baby,
+  UserX,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { sletEgenKonto } from "@/server/deletion.functions";
 
 export const Route = createFileRoute("/slet-data")({
@@ -220,9 +222,73 @@ function SletFormular() {
   );
 }
 
+function IkkeAdminVisning({ email }: { email: string }) {
+  const { logUd } = useAuth();
+  return (
+    <div className="glass rounded-2xl p-6">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/15">
+          <UserX className="h-5 w-5 text-warning" />
+        </div>
+        <div>
+          <h2 className="font-display text-lg font-semibold">Selvbetjening kun for administratorer</h2>
+          <p className="text-xs text-muted-foreground">Logget ind som <span className="text-foreground">{email}</span></p>
+        </div>
+      </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Din konto er oprettet som <span className="font-semibold text-foreground">medarbejder</span> i en
+        organisation. Selvbetjeningssletning er kun tilgængelig for administratorer, da sletning af en
+        medarbejderkonto kan påvirke organisationens data.
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Du har to muligheder:
+      </p>
+      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 shrink-0 text-primary">1.</span>
+          <span>Bed din organisations administrator om at fjerne dig fra organisationen, og send derefter en sletningsanmodning til os via e-mail.</span>
+        </li>
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 shrink-0 text-primary">2.</span>
+          <span>Send en sletningsanmodning direkte til os — vi behandler den inden for 30 dage som krævet af GDPR artikel 17.</span>
+        </li>
+      </ul>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <a
+          href="mailto:support@tilstede.live?subject=Anmodning%20om%20datasletning&body=Hej%20Tilstede%2C%0A%0AJeg%20anmoder%20hermed%20om%20sletning%20af%20alle%20personoplysninger%20tilknyttet%20denne%20e-mailadresse%20i%20henhold%20til%20GDPR%20artikel%2017.%0A%0AMed%20venlig%20hilsen"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
+        >
+          <Mail className="h-4 w-4" /> Send sletningsanmodning via e-mail
+        </a>
+        <button
+          onClick={logUd}
+          className="rounded-xl bg-surface px-5 py-2.5 text-sm font-semibold transition hover:bg-surface-elevated"
+        >
+          Log ud
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SletDataSide() {
   const { user, loading } = useAuth();
+  const [erAdmin, setErAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) { setErAdmin(null); return; }
+    supabase
+      .from("organization_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .eq("status", "active")
+      .limit(1)
+      .then(({ data }) => setErAdmin((data?.length ?? 0) > 0));
+  }, [user]);
+
   const erLoggetInd = !loading && user !== null;
+  const adminChecked = erLoggetInd && erAdmin !== null;
 
   return (
     <div className="min-h-screen">
@@ -313,14 +379,16 @@ function SletDataSide() {
 
       {/* ── Action ── */}
       <section className="container mx-auto px-6 pb-24">
-        {loading ? (
+        {loading || (erLoggetInd && !adminChecked) ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : erLoggetInd ? (
+        ) : !erLoggetInd ? (
+          <LoggetUdVisning />
+        ) : erAdmin ? (
           <SletFormular />
         ) : (
-          <LoggetUdVisning />
+          <IkkeAdminVisning email={user!.email ?? ""} />
         )}
       </section>
 
