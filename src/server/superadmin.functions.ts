@@ -1025,6 +1025,93 @@ export const superadminUpdateGdprRequest = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+// ─── Operations ──────────────────────────────────────────────────────────────
+
+export type DbTableStat = {
+  tableName: string;
+  rowCount: number;
+  totalBytes: number;
+  totalSize: string;
+};
+
+export type AppSetting = {
+  key: string;
+  value: string | number | boolean | null;
+  description: string | null;
+  updatedAt: string;
+};
+
+export const superadminGetOpsData = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const [dbRes, settingsRes] = await Promise.all([
+      (supabaseAdmin as any)
+        .rpc("superadmin_db_stats")
+        .then((r: any) => r)
+        .catch(() => ({ data: [] })),
+
+      (supabaseAdmin as any)
+        .from("app_settings")
+        .select("key, value, description, updated_at")
+        .order("key")
+        .then((r: any) => r)
+        .catch(() => ({ data: [] })),
+    ]);
+
+    const dbStats: DbTableStat[] = (dbRes.data ?? []).map((r: any) => ({
+      tableName: r.table_name as string,
+      rowCount: Number(r.row_count),
+      totalBytes: Number(r.total_bytes),
+      totalSize: r.total_size as string,
+    }));
+
+    const settings: AppSetting[] = (settingsRes.data ?? []).map((s: any) => ({
+      key: s.key as string,
+      value: s.value,
+      description: (s.description ?? null) as string | null,
+      updatedAt: s.updated_at as string,
+    }));
+
+    return { dbStats, settings };
+  });
+
+export const superadminSetAppSetting = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        key: z.string().min(1).max(100),
+        value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { error } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .upsert({
+        key: data.key,
+        value: data.value,
+        updated_at: new Date().toISOString(),
+        updated_by: admin.id,
+      });
+
+    if (error && isMissingTable(error)) {
+      throw new Error("app_settings-tabellen eksisterer ikke endnu. Kør migration 20260509280000.");
+    }
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_SET_APP_SETTING", null, {
+      key: data.key,
+      value: data.value,
+    });
+
+    return { success: true };
+  });
+
 // ─── Update custom plan ───────────────────────────────────────────────────────
 
 export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })

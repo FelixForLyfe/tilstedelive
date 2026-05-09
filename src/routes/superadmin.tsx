@@ -32,6 +32,11 @@ import {
   Lock,
   FileCheck,
   Clock,
+  Server,
+  Database,
+  ToggleLeft,
+  ToggleRight,
+  Settings2,
 } from "lucide-react";
 import {
   BarChart,
@@ -68,6 +73,8 @@ import {
   superadminGetSecurityData,
   superadminCreateGdprRequest,
   superadminUpdateGdprRequest,
+  superadminGetOpsData,
+  superadminSetAppSetting,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
@@ -75,6 +82,8 @@ import {
   type OrgHealthData,
   type GdprRequest,
   type AuthSecuritySummary,
+  type DbTableStat,
+  type AppSetting,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -196,6 +205,7 @@ const EVENT_LABELS: Record<string, string> = {
   SUPERADMIN_SAVE_ORG_NOTE: "Gemte organisations-note",
   SUPERADMIN_CREATE_GDPR_REQUEST: "Oprettede GDPR-anmodning",
   SUPERADMIN_UPDATE_GDPR_REQUEST: "Opdaterede GDPR-anmodning",
+  SUPERADMIN_SET_APP_SETTING: "Opdaterede app-indstilling",
 };
 
 const CUSTOM_PLAN_STATUS_LABELS: Record<string, string> = {
@@ -218,6 +228,7 @@ const TABS = [
   { id: "keys", label: "Plan-nøgler", icon: Key },
   { id: "misc", label: "Misc. Planer", icon: Layers },
   { id: "sikkerhed", label: "Sikkerhed", icon: ShieldAlert },
+  { id: "drift", label: "Drift", icon: Server },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -341,6 +352,7 @@ function SuperadminPanel() {
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
         {activeTab === "sikkerhed" && <SecurityTab accessToken={accessToken} />}
+        {activeTab === "drift" && <DriftTab accessToken={accessToken} />}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -2895,6 +2907,312 @@ function GdprRequestModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Drift tab ────────────────────────────────────────────────────────────────
+
+const SETTING_META: Record<string, { label: string; description: string; type: "boolean" | "string" | "number" }> = {
+  maintenance_mode: {
+    label: "Vedligeholdelsestilstand",
+    description: "Vis vedligeholdelsesbanner til ikke-superadmin brugere",
+    type: "boolean",
+  },
+  maintenance_message: {
+    label: "Vedligeholdelsesbesked",
+    description: "Tekst der vises under vedligehold",
+    type: "string",
+  },
+  max_trial_days: {
+    label: "Prøveperiode (dage)",
+    description: "Standardlængde for nye prøveperioder",
+    type: "number",
+  },
+};
+
+function DriftTab({ accessToken }: { accessToken: string }) {
+  const [dbStats, setDbStats] = useState<DbTableStat[]>([]);
+  const [settings, setSettings] = useState<AppSetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await superadminGetOpsData({ data: { accessToken } });
+      const r = result as { dbStats: DbTableStat[]; settings: AppSetting[] };
+      setDbStats(r.dbStats);
+      setSettings(r.settings);
+      // Seed drafts from current values
+      const d: Record<string, string> = {};
+      for (const s of r.settings) {
+        d[s.key] = typeof s.value === "string" ? s.value : JSON.stringify(s.value);
+      }
+      setDrafts(d);
+    } catch {
+      toast.error("Kunne ikke indlæse driftsdata");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const saveSetting = async (key: string) => {
+    setSavingKey(key);
+    const meta = SETTING_META[key];
+    let parsed: unknown = drafts[key];
+    if (meta?.type === "boolean") {
+      parsed = drafts[key] === "true" || drafts[key] === true.toString();
+    } else if (meta?.type === "number") {
+      parsed = Number(drafts[key]) || 0;
+    }
+    try {
+      await superadminSetAppSetting({ data: { accessToken, key, value: parsed } });
+      toast.success("Indstilling gemt");
+      load();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme indstilling");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const maintenanceOn = settings.find((s) => s.key === "maintenance_mode")?.value === true;
+
+  const toggleMaintenance = async () => {
+    setSavingKey("maintenance_mode");
+    try {
+      await superadminSetAppSetting({
+        data: { accessToken, key: "maintenance_mode", value: !maintenanceOn },
+      });
+      toast.success(maintenanceOn ? "Vedligeholdelsestilstand deaktiveret" : "Vedligeholdelsestilstand aktiveret");
+      load();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke skifte tilstand");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const totalDbBytes = dbStats.reduce((s, t) => s + t.totalBytes, 0);
+  const fmtBytes = (b: number) => {
+    if (b >= 1_073_741_824) return (b / 1_073_741_824).toFixed(1) + " GB";
+    if (b >= 1_048_576) return (b / 1_048_576).toFixed(1) + " MB";
+    return (b / 1024).toFixed(0) + " KB";
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Indlæser driftsdata…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Drift & Operationer</h2>
+          <p className="text-sm text-muted-foreground">
+            Database · {dbStats.length} tabeller · {fmtBytes(totalDbBytes)} total
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+        >
+          <RefreshCw className="h-4 w-4" /> Opdater
+        </button>
+      </div>
+
+      {/* ── Maintenance mode banner ── */}
+      <section>
+        <h3 className="mb-3 font-display text-base font-semibold">Vedligeholdelsestilstand</h3>
+        <div className={`flex items-center justify-between rounded-2xl border p-5 transition ${
+          maintenanceOn
+            ? "border-warning/40 bg-warning/8"
+            : "border-border bg-surface/50"
+        }`}>
+          <div className="flex items-center gap-3">
+            {maintenanceOn
+              ? <ToggleRight className="h-8 w-8 text-warning" />
+              : <ToggleLeft className="h-8 w-8 text-muted-foreground" />}
+            <div>
+              <p className="font-semibold">
+                {maintenanceOn ? "Vedligeholdelsestilstand aktiv" : "Normal drift"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {maintenanceOn
+                  ? "Brugere uden superadmin-rolle ser vedligeholdelsesbesked"
+                  : "Alle brugere har normal adgang"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleMaintenance}
+            disabled={savingKey === "maintenance_mode"}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+              maintenanceOn
+                ? "bg-success/15 text-success hover:bg-success/25"
+                : "bg-warning/15 text-warning hover:bg-warning/25"
+            }`}
+          >
+            {savingKey === "maintenance_mode"
+              ? "…"
+              : maintenanceOn
+              ? "Deaktivér"
+              : "Aktivér"}
+          </button>
+        </div>
+      </section>
+
+      {/* ── App settings ── */}
+      <section>
+        <h3 className="mb-3 font-display text-base font-semibold">
+          <Settings2 className="mr-1.5 inline h-4 w-4" />
+          App-indstillinger
+        </h3>
+        {settings.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-6 text-sm text-muted-foreground">
+            Ingen indstillinger fundet — kør migration 20260509280000
+          </div>
+        ) : (
+          <div className="glass divide-y divide-border/50 overflow-hidden rounded-2xl">
+            {settings.map((s) => {
+              const meta = SETTING_META[s.key];
+              const isBool = meta?.type === "boolean";
+              const isDirty =
+                drafts[s.key] !==
+                (typeof s.value === "string" ? s.value : JSON.stringify(s.value));
+              return (
+                <div key={s.key} className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex-1">
+                    <p className="font-medium">{meta?.label ?? s.key}</p>
+                    {meta?.description && (
+                      <p className="text-xs text-muted-foreground">{meta.description}</p>
+                    )}
+                    <p className="mt-0.5 text-xs text-muted-foreground opacity-60">
+                      Sidst ændret: {fmtTidspunkt(s.updatedAt)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isBool ? (
+                      <button
+                        onClick={() => {
+                          const next = drafts[s.key] === "true" ? "false" : "true";
+                          setDrafts((d) => ({ ...d, [s.key]: next }));
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          drafts[s.key] === "true"
+                            ? "bg-success/15 text-success"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {drafts[s.key] === "true" ? "Aktiveret" : "Deaktiveret"}
+                      </button>
+                    ) : (
+                      <input
+                        type={meta?.type === "number" ? "number" : "text"}
+                        value={drafts[s.key] ?? ""}
+                        onChange={(e) =>
+                          setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
+                        }
+                        className="w-full max-w-xs rounded-xl border border-input bg-background px-3 py-1.5 text-sm focus:border-ring focus:outline-none sm:w-64"
+                      />
+                    )}
+                    {isDirty && (
+                      <button
+                        onClick={() => saveSetting(s.key)}
+                        disabled={savingKey === s.key}
+                        className="inline-flex items-center gap-1 rounded-xl bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        <Save className="h-3 w-3" />
+                        {savingKey === s.key ? "…" : "Gem"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Database stats ── */}
+      <section>
+        <h3 className="mb-3 font-display text-base font-semibold">
+          <Database className="mr-1.5 inline h-4 w-4" />
+          Database-tabeller
+        </h3>
+        {dbStats.length === 0 ? (
+          <div className="glass rounded-2xl px-5 py-6 text-sm text-muted-foreground">
+            Database-statistik ikke tilgængelig — kør migration 20260509280000
+          </div>
+        ) : (
+          <div className="glass overflow-hidden rounded-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 text-left">Tabel</th>
+                    <th className="px-4 py-3 text-right">Rækker (ca.)</th>
+                    <th className="px-4 py-3 text-right">Størrelse</th>
+                    <th className="px-4 py-3 text-left">Andel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dbStats.map((t, i) => {
+                    const pct = totalDbBytes > 0
+                      ? Math.max(Math.round((t.totalBytes / totalDbBytes) * 100), 1)
+                      : 0;
+                    return (
+                      <tr
+                        key={t.tableName}
+                        className={`border-b border-border/50 ${i % 2 ? "bg-surface/20" : ""}`}
+                      >
+                        <td className="px-4 py-3 font-mono text-xs">{t.tableName}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {t.rowCount.toLocaleString("da-DK")}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums">
+                          {t.totalSize}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-24 overflow-hidden rounded-full bg-surface">
+                              <div
+                                className="h-full rounded-full bg-primary/50"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="w-8 text-xs text-muted-foreground">{pct}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t-2 border-border bg-surface/40 font-bold">
+                    <td className="px-4 py-3">Total</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {dbStats.reduce((s, t) => s + t.rowCount, 0).toLocaleString("da-DK")}
+                    </td>
+                    <td className="px-4 py-3 text-right">{fmtBytes(totalDbBytes)}</td>
+                    <td className="px-4 py-3" />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-muted-foreground opacity-60">
+          Rækkeantal er approksimativt (pg_class.reltuples) — ingen tabelindhold eksponeres
+        </p>
+      </section>
     </div>
   );
 }
