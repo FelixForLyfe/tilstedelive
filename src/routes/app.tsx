@@ -114,7 +114,7 @@ function Paywall({
 
 function AppLayout() {
   const { user, logUd, session } = useAuth();
-  const { medlemskaber, aktivOrg, aktivOrgId, vaelgOrg, erAdmin, loading, trialDaysLeft, isBlocked, blockReason } = useOrg();
+  const { medlemskaber, aktivOrg, aktivOrgId, vaelgOrg, erAdmin, loading, loadError, genindlaes, trialDaysLeft, isBlocked, blockReason } = useOrg();
   const navigate = useNavigate();
   const path = useRouterState({ select: (r) => r.location.pathname });
   const openBillingPortal = useServerFn(createBillingPortalSession);
@@ -158,6 +158,23 @@ function AppLayout() {
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Indlæser…</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="glass max-w-md rounded-3xl p-8 text-center">
+          <h2 className="font-display text-xl font-bold">Forbindelsesfejl</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Vi kunne ikke hente dine organisationsdata. Tjek din forbindelse og prøv igen.
+          </p>
+          <div className="mt-6 flex justify-center gap-2">
+            <button onClick={handleLogout} className="rounded-xl border border-border bg-surface px-4 py-2 text-sm">Log ud</button>
+            <button onClick={genindlaes} className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Prøv igen</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!aktivOrgId) {

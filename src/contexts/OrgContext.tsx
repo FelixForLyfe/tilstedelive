@@ -35,6 +35,7 @@ type OrgCtx = {
   vaelgOrg: (id: string) => void;
   genindlaes: () => Promise<void>;
   loading: boolean;
+  loadError: string | null;
 };
 
 const defaultTerms = getTerms(null);
@@ -44,7 +45,7 @@ const Ctx = createContext<OrgCtx>({
   orgType: null, terms: defaultTerms,
   subscriptionStatus: null, subscriptionTier: null, trialEndsAt: null,
   trialDaysLeft: null, isBlocked: false, blockReason: null,
-  vaelgOrg: () => {}, genindlaes: async () => {}, loading: true,
+  vaelgOrg: () => {}, genindlaes: async () => {}, loading: true, loadError: null,
 });
 
 const LS_KEY = "tilstede.aktivOrgId";
@@ -54,19 +55,27 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [medlemskaber, setMedlemskaber] = useState<Medlemskab[]>([]);
   const [aktivOrgId, setAktivOrgIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const indlaes = useCallback(async () => {
     if (!user) {
-      setMedlemskaber([]); setAktivOrgIdState(null); setLoading(false);
+      setMedlemskaber([]); setAktivOrgIdState(null); setLoadError(null); setLoading(false);
       return;
     }
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase
       .from("organization_members")
       .select("organization_id, role, status, organizations(id, name, org_type, subscription_status, subscription_tier, trial_ends_at)")
       .eq("user_id", user.id)
-      .eq("status", "active");
-    if (error) { console.error(error); setLoading(false); return; }
+      .eq("status", "active")
+      .limit(50);
+    if (error) {
+      console.error("OrgContext: organisation_members query fejlede:", error);
+      setLoadError(error.message);
+      setLoading(false);
+      return;
+    }
     const list = (data ?? []) as unknown as Medlemskab[];
     setMedlemskaber(list);
 
@@ -119,7 +128,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       medlemskaber, aktivOrgId, aktivOrg, erAdmin, orgType, terms,
       subscriptionStatus, subscriptionTier, trialEndsAt, trialDaysLeft, isBlocked, blockReason,
-      vaelgOrg, genindlaes: indlaes, loading,
+      vaelgOrg, genindlaes: indlaes, loading, loadError,
     }}>
       {children}
     </Ctx.Provider>
