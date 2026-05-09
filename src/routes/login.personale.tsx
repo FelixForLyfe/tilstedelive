@@ -6,10 +6,10 @@ import { toast } from "sonner";
 import { PasswordInput } from "@/components/ui/password-input";
 
 export const Route = createFileRoute("/login/personale")({
-  component: PersonaleLogin,
+  component: TeamLogin,
 });
 
-function PersonaleLogin() {
+function TeamLogin() {
   const navigate = useNavigate();
   const [orgNavn, setOrgNavn] = useState("");
   const [email, setEmail] = useState("");
@@ -26,7 +26,6 @@ function PersonaleLogin() {
       return;
     }
 
-    // Find organisationen ud fra navnet og verificér medlemskab
     const { data: medlemskaber } = await supabase
       .from("organization_members")
       .select("organization_id, role, status, organizations(id, name)")
@@ -41,7 +40,7 @@ function PersonaleLogin() {
       await supabase.auth.signOut();
       setLoading(false);
       toast.error("Ingen adgang", {
-        description: "Du er ikke medlem af denne organisation. Bed admin om at tilføje dig.",
+        description: "Du er ikke tilknyttet denne organisation. Bed din administrator om en invitations-kode.",
       });
       return;
     }
@@ -64,41 +63,64 @@ function PersonaleLogin() {
 
         <div className="glass rounded-3xl p-8 shadow-card">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent">
-            <Users className="h-3.5 w-3.5" /> Personale
+            <Users className="h-3.5 w-3.5" /> Log ind
           </div>
-          <h1 className="font-display text-2xl font-bold">Personale-login</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Skriv organisationens navn og log ind med din konto.</p>
+          <h1 className="font-display text-2xl font-bold">Log ind</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Skriv organisationens navn og log ind med din konto.
+          </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div>
               <label className="text-sm font-medium">Organisationens navn</label>
-              <input required value={orgNavn} onChange={(e) => setOrgNavn(e.target.value)}
-                placeholder="Fx Solsikkens SFO"
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                required
+                value={orgNavn}
+                onChange={(e) => setOrgNavn(e.target.value)}
+                placeholder="Fx Greve FC eller Solsikkens SFO"
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">E-mail</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <PasswordInput required value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
+              <PasswordInput
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1"
+              />
             </div>
-            <button type="submit" disabled={loading}
-              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
+            >
               {loading ? "Logger ind…" : "Log ind"}
             </button>
           </form>
 
           <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
             <p>
-              Har du ikke en konto?{" "}
-              <Link to="/signup/personale" className="font-semibold text-primary hover:underline">Opret personale-konto</Link>
+              Ny bruger?{" "}
+              <Link to="/signup/personale" className="font-semibold text-primary hover:underline">
+                Opret konto med invitations-kode
+              </Link>
             </p>
             <p>
-              Er du admin?{" "}
-              <Link to="/login/admin" className="font-semibold text-primary hover:underline">Admin-login</Link>
+              Er du administrator?{" "}
+              <Link to="/login/admin" className="font-semibold text-primary hover:underline">
+                Admin-login
+              </Link>
             </p>
           </div>
         </div>

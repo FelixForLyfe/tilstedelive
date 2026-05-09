@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, type FormEvent } from "react";
 import {
@@ -10,14 +10,20 @@ import {
   Compass,
   Baby,
   Building2,
+  Zap,
+  Star,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrganizationAdmin } from "@/server/organization.functions";
+import { createCheckoutSession } from "@/server/stripe.functions";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/ui/password-input";
 import { type OrgType } from "@/lib/terminology";
 
 export const Route = createFileRoute("/signup/")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    plan: (s.plan as string | undefined) ?? undefined,
+  }),
   component: SignupSide,
 });
 
@@ -26,20 +32,73 @@ type OrgTypeOption = {
   label: string;
   icon: React.ElementType;
   placeholder: string;
+  teamLabel: string;
+  teamLink: string;
 };
 
 const ORG_TYPES: OrgTypeOption[] = [
-  { type: "skole_sfo",      label: "Skole / SFO",              icon: GraduationCap, placeholder: "Fx Solsikkens SFO" },
-  { type: "daginstitution", label: "Privat daginstitution",     icon: Baby,          placeholder: "Fx Børnehuset Regnbuen" },
-  { type: "sportsklub",     label: "Sportsklub",                icon: Trophy,        placeholder: "Fx Greve FC" },
-  { type: "fitnesscenter",  label: "Fitnesscenter",             icon: Dumbbell,      placeholder: "Fx CrossFit Centrum" },
-  { type: "spejder",        label: "Spejder / Ungdomsforening", icon: Compass,       placeholder: "Fx 1. Roskilde Gruppe" },
-  { type: "andet",          label: "Andet",                     icon: Building2,     placeholder: "Fx Musikskolen Vest" },
+  {
+    type: "skole_sfo",
+    label: "Skole / SFO",
+    icon: GraduationCap,
+    placeholder: "Fx Solsikkens SFO",
+    teamLabel: "Er du personale?",
+    teamLink: "Opret personale-konto",
+  },
+  {
+    type: "daginstitution",
+    label: "Privat daginstitution",
+    icon: Baby,
+    placeholder: "Fx Børnehuset Regnbuen",
+    teamLabel: "Er du pædagog?",
+    teamLink: "Opret din konto",
+  },
+  {
+    type: "sportsklub",
+    label: "Sportsklub",
+    icon: Trophy,
+    placeholder: "Fx Greve FC",
+    teamLabel: "Er du træner eller hjælper?",
+    teamLink: "Opret din konto",
+  },
+  {
+    type: "fitnesscenter",
+    label: "Fitnesscenter",
+    icon: Dumbbell,
+    placeholder: "Fx CrossFit Centrum",
+    teamLabel: "Er du instruktør?",
+    teamLink: "Opret din konto",
+  },
+  {
+    type: "spejder",
+    label: "Spejder / Ungdom",
+    icon: Compass,
+    placeholder: "Fx 1. Roskilde Gruppe",
+    teamLabel: "Er du gruppeleder?",
+    teamLink: "Opret din konto",
+  },
+  {
+    type: "andet",
+    label: "Andet",
+    icon: Building2,
+    placeholder: "Fx Musikskolen Vest",
+    teamLabel: "Er du medarbejder?",
+    teamLink: "Opret din konto",
+  },
 ];
+
+const PLAN_LABELS: Record<string, { label: string; icon: React.ElementType }> = {
+  basis: { label: "Basis", icon: Zap },
+  pro: { label: "Pro", icon: Star },
+  organisation: { label: "Organisation", icon: Building2 },
+};
 
 function SignupSide() {
   const navigate = useNavigate();
+  const { plan } = useSearch({ from: "/signup/" });
   const opretOrganisation = useServerFn(createOrganizationAdmin);
+  const startCheckout = useServerFn(createCheckoutSession);
+
   const [navn, setNavn] = useState("");
   const [orgNavn, setOrgNavn] = useState("");
   const [orgType, setOrgType] = useState<OrgType>("skole_sfo");
@@ -48,6 +107,7 @@ function SignupSide() {
   const [loading, setLoading] = useState(false);
 
   const valgtType = ORG_TYPES.find((o) => o.type === orgType)!;
+  const planInfo = plan ? PLAN_LABELS[plan] : null;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -61,10 +121,34 @@ function SignupSide() {
       const org = await opretOrganisation({
         data: { fullName: navn || email, orgName: orgNavn.trim(), orgType, email, password },
       });
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+
+      const { error: signInErr, data: signInData } = await supabase.auth.signInWithPassword({ email, password });
       if (signInErr) throw signInErr;
 
       localStorage.setItem("tilstede.aktivOrgId", org.organizationId);
+
+      // If arriving from pricing page, go to Stripe checkout
+      if (plan && signInData.session) {
+        try {
+          const origin = window.location.origin;
+          const result = await startCheckout({
+            data: {
+              plan: plan as "basis" | "pro" | "organisation",
+              orgId: org.organizationId,
+              accessToken: signInData.session.access_token,
+              successUrl: `${origin}/checkout/succes?plan=${plan}`,
+              cancelUrl: `${origin}/priser`,
+            },
+          });
+          if (result?.url) {
+            window.location.href = result.url;
+            return;
+          }
+        } catch {
+          // Stripe not configured yet — fall through to app
+        }
+      }
+
       navigate({ to: "/app/admin" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Prøv igen om lidt.";
@@ -85,12 +169,23 @@ function SignupSide() {
         </Link>
 
         <div className="glass rounded-3xl p-8 shadow-card">
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            <ShieldCheck className="h-3.5 w-3.5" /> Admin
+          <div className="mb-2 flex flex-wrap gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              <ShieldCheck className="h-3.5 w-3.5" /> Admin
+            </div>
+            {planInfo && (() => {
+              const PlanIcon = planInfo.icon;
+              return (
+                <div className="inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+                  <PlanIcon className="h-3.5 w-3.5" /> Starter med {planInfo.label}
+                </div>
+              );
+            })()}
           </div>
+
           <h1 className="font-display text-2xl font-bold">Opret organisation</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Du bliver admin på et nyt dashboard som dit team kan logge ind på.
+            Du bliver admin. {valgtType.teamLink === "Er du personale?" ? "Dit personale" : "Dit team"} kan bagefter inviteres og logge ind.
           </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-5">
@@ -168,7 +263,11 @@ function SignupSide() {
               disabled={loading}
               className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Opretter…" : "Opret organisation"}
+              {loading
+                ? plan
+                  ? "Opretter og åbner betaling…"
+                  : "Opretter…"
+                : "Opret organisation"}
             </button>
           </form>
 
@@ -180,9 +279,9 @@ function SignupSide() {
               </Link>
             </p>
             <p>
-              Er du personale?{" "}
+              {valgtType.teamLabel}{" "}
               <Link to="/signup/personale" className="font-semibold text-primary hover:underline">
-                Opret personale-konto
+                {valgtType.teamLink}
               </Link>
             </p>
           </div>

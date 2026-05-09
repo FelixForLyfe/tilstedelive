@@ -37,7 +37,7 @@ function LoginVaelg() {
                 <Users className="h-6 w-6" />
               </div>
               <div className="flex-1">
-                <div className="font-semibold">Personale</div>
+                <div className="font-semibold">Medarbejder / Frivillig</div>
                 <div className="text-xs text-muted-foreground">Log ind med organisationens navn og din konto</div>
               </div>
             </Link>

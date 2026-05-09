@@ -1,16 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { Sparkles, Users } from "lucide-react";
+import { Sparkles, KeyRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/ui/password-input";
 
 export const Route = createFileRoute("/signup/personale")({
-  component: PersonaleSignup,
+  component: TeamSignup,
 });
 
-function PersonaleSignup() {
+function TeamSignup() {
   const navigate = useNavigate();
   const { genindlaes } = useOrg();
   const [navn, setNavn] = useState("");
@@ -26,11 +26,11 @@ function PersonaleSignup() {
     const renKode = kode.trim().toUpperCase();
     if (!renKode) {
       setLoading(false);
-      toast.error("Indtast invitations-kode fra din admin");
+      toast.error("Indtast invitations-koden du har fået fra din administrator");
       return;
     }
 
-    // 1) Opret konto (validering af koden sker i redeem_invite efter login)
+    // 1) Opret konto
     const redirectUrl = `${window.location.origin}/login/personale`;
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -52,27 +52,25 @@ function PersonaleSignup() {
     }
 
     if (!aktivSession) {
-      // Konto blev lavet, men auto-confirm er måske slået fra — bed brugeren logge ind
       setLoading(false);
-      toast.success("Konto oprettet", { description: "Log ind for at indløse din kode." });
+      toast.success("Konto oprettet", { description: "Log ind for at indløse din invitations-kode." });
       navigate({ to: "/login/personale" });
       return;
     }
 
-    // 3) Indløs kode via RLS-safe RPC (no privileged bypass)
+    // 3) Indløs invitations-kode
     const { error: redeemErr } = await supabase.rpc("redeem_invite", { _code: renKode });
     setLoading(false);
     if (redeemErr) {
       toast.error("Kunne ikke indløse kode", {
         description: redeemErr.message.includes("Ugyldig")
-          ? "Koden er ugyldig eller udløbet. Bed admin om en ny."
+          ? "Koden er ugyldig eller udløbet. Bed din administrator om en ny kode."
           : redeemErr.message,
       });
-      // Brugeren har en konto men ingen organisation — send til app som vil vise "ingen organisation"
       navigate({ to: "/app" });
       return;
     }
-    // Genindlæs medlemskaber så OrgContext finder den nye organisation
+
     await genindlaes();
     toast.success("Velkommen", { description: "Du er nu tilføjet til organisationen." });
     navigate({ to: "/app" });
@@ -90,42 +88,70 @@ function PersonaleSignup() {
 
         <div className="glass rounded-3xl p-8 shadow-card">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent">
-            <Users className="h-3.5 w-3.5" /> Personale
+            <KeyRound className="h-3.5 w-3.5" /> Invitations-kode
           </div>
-          <h1 className="font-display text-2xl font-bold">Opret personale-konto</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Brug invitations-koden fra din admin.</p>
+          <h1 className="font-display text-2xl font-bold">Opret din konto</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Brug invitations-koden fra din administrator for at tilmelde dig organisationen.
+          </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div>
               <label className="text-sm font-medium">Dit fulde navn</label>
-              <input required value={navn} onChange={(e) => setNavn(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                required
+                value={navn}
+                onChange={(e) => setNavn(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Invitations-kode</label>
-              <input required value={kode} onChange={(e) => setKode(e.target.value.toUpperCase())}
+              <input
+                required
+                value={kode}
+                onChange={(e) => setKode(e.target.value.toUpperCase())}
                 placeholder="Fx ABC123XY"
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm font-mono uppercase tracking-widest focus:border-ring focus:outline-none" />
-              <p className="mt-1 text-xs text-muted-foreground">Få koden fra admin under Admin → Personale.</p>
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm font-mono uppercase tracking-widest focus:border-ring focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Koden finder du i invitationen fra din administrator.
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium">E-mail</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Adgangskode</label>
-              <PasswordInput required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
+              <PasswordInput
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1"
+              />
             </div>
-            <button type="submit" disabled={loading}
-              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50">
-              {loading ? "Opretter…" : "Opret konto"}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Opretter konto…" : "Opret konto og tilmeld organisation"}
             </button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Har du allerede en konto?{" "}
-            <Link to="/login/personale" className="font-semibold text-primary hover:underline">Log ind</Link>
+            <Link to="/login/personale" className="font-semibold text-primary hover:underline">
+              Log ind
+            </Link>
           </p>
         </div>
       </div>
