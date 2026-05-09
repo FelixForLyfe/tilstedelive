@@ -9,14 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as Verify2faRouteImport } from './routes/verify-2fa'
 import { Route as SuperadminRouteImport } from './routes/superadmin'
+import { Route as SletDataRouteImport } from './routes/slet-data'
 import { Route as SikkerhedRouteImport } from './routes/sikkerhed'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as Setup2faRouteImport } from './routes/setup-2fa'
 import { Route as PrivatlivspolitikRouteImport } from './routes/privatlivspolitik'
 import { Route as PriserRouteImport } from './routes/priser'
-import { Route as SletDataRouteImport } from './routes/slet-data'
-import { Route as SetupTwoFaRouteImport } from './routes/setup-2fa'
-import { Route as VerifyTwoFaRouteImport } from './routes/verify-2fa'
-import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -26,39 +26,26 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as SignupPersonaleRouteImport } from './routes/signup.personale'
 import { Route as LoginPersonaleRouteImport } from './routes/login.personale'
 import { Route as LoginAdminRouteImport } from './routes/login.admin'
+import { Route as CheckoutSuccesRouteImport } from './routes/checkout.succes'
+import { Route as CheckoutAnnulleretRouteImport } from './routes/checkout.annulleret'
 import { Route as AppLogningRouteImport } from './routes/app.logning'
 import { Route as AppArkivRouteImport } from './routes/app.arkiv'
 import { Route as AppAktiviteterRouteImport } from './routes/app.aktiviteter'
 import { Route as AppAdminRouteImport } from './routes/app.admin'
 
+const Verify2faRoute = Verify2faRouteImport.update({
+  id: '/verify-2fa',
+  path: '/verify-2fa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperadminRoute = SuperadminRouteImport.update({
   id: '/superadmin',
   path: '/superadmin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PrivatlivspolitikRoute = PrivatlivspolitikRouteImport.update({
-  id: '/privatlivspolitik',
-  path: '/privatlivspolitik',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PriserRoute = PriserRouteImport.update({
-  id: '/priser',
-  path: '/priser',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SletDataRoute = SletDataRouteImport.update({
   id: '/slet-data',
   path: '/slet-data',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupTwoFaRoute = SetupTwoFaRouteImport.update({
-  id: '/setup-2fa',
-  path: '/setup-2fa',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerifyTwoFaRoute = VerifyTwoFaRouteImport.update({
-  id: '/verify-2fa',
-  path: '/verify-2fa',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SikkerhedRoute = SikkerhedRouteImport.update({
@@ -69,6 +56,21 @@ const SikkerhedRoute = SikkerhedRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Setup2faRoute = Setup2faRouteImport.update({
+  id: '/setup-2fa',
+  path: '/setup-2fa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivatlivspolitikRoute = PrivatlivspolitikRouteImport.update({
+  id: '/privatlivspolitik',
+  path: '/privatlivspolitik',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PriserRoute = PriserRouteImport.update({
+  id: '/priser',
+  path: '/priser',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -116,6 +118,16 @@ const LoginAdminRoute = LoginAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => LoginRoute,
 } as any)
+const CheckoutSuccesRoute = CheckoutSuccesRouteImport.update({
+  id: '/checkout/succes',
+  path: '/checkout/succes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutAnnulleretRoute = CheckoutAnnulleretRouteImport.update({
+  id: '/checkout/annulleret',
+  path: '/checkout/annulleret',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppLogningRoute = AppLogningRouteImport.update({
   id: '/logning',
   path: '/logning',
@@ -141,18 +153,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRouteWithChildren
+  '/priser': typeof PriserRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/setup-2fa': typeof Setup2faRoute
   '/signup': typeof SignupRouteWithChildren
   '/sikkerhed': typeof SikkerhedRoute
-  '/superadmin': typeof SuperadminRoute
-  '/privatlivspolitik': typeof PrivatlivspolitikRoute
-  '/priser': typeof PriserRoute
   '/slet-data': typeof SletDataRoute
-  '/setup-2fa': typeof SetupTwoFaRoute
-  '/verify-2fa': typeof VerifyTwoFaRoute
+  '/superadmin': typeof SuperadminRoute
+  '/verify-2fa': typeof Verify2faRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkout/annulleret': typeof CheckoutAnnulleretRoute
+  '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
@@ -162,17 +176,19 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/sikkerhed': typeof SikkerhedRoute
-  '/superadmin': typeof SuperadminRoute
-  '/privatlivspolitik': typeof PrivatlivspolitikRoute
   '/priser': typeof PriserRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/setup-2fa': typeof Setup2faRoute
+  '/sikkerhed': typeof SikkerhedRoute
   '/slet-data': typeof SletDataRoute
-  '/setup-2fa': typeof SetupTwoFaRoute
-  '/verify-2fa': typeof VerifyTwoFaRoute
+  '/superadmin': typeof SuperadminRoute
+  '/verify-2fa': typeof Verify2faRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkout/annulleret': typeof CheckoutAnnulleretRoute
+  '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
@@ -185,18 +201,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRouteWithChildren
+  '/priser': typeof PriserRoute
+  '/privatlivspolitik': typeof PrivatlivspolitikRoute
+  '/setup-2fa': typeof Setup2faRoute
   '/signup': typeof SignupRouteWithChildren
   '/sikkerhed': typeof SikkerhedRoute
-  '/superadmin': typeof SuperadminRoute
-  '/privatlivspolitik': typeof PrivatlivspolitikRoute
-  '/priser': typeof PriserRoute
   '/slet-data': typeof SletDataRoute
-  '/setup-2fa': typeof SetupTwoFaRoute
-  '/verify-2fa': typeof VerifyTwoFaRoute
+  '/superadmin': typeof SuperadminRoute
+  '/verify-2fa': typeof Verify2faRoute
   '/app/admin': typeof AppAdminRoute
   '/app/aktiviteter': typeof AppAktiviteterRoute
   '/app/arkiv': typeof AppArkivRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkout/annulleret': typeof CheckoutAnnulleretRoute
+  '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
@@ -210,18 +228,20 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/priser'
+    | '/privatlivspolitik'
+    | '/setup-2fa'
     | '/signup'
     | '/sikkerhed'
-    | '/superadmin'
-    | '/privatlivspolitik'
-    | '/priser'
     | '/slet-data'
-    | '/setup-2fa'
+    | '/superadmin'
     | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
     | '/app/logning'
+    | '/checkout/annulleret'
+    | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
@@ -231,17 +251,19 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/sikkerhed'
-    | '/superadmin'
-    | '/privatlivspolitik'
     | '/priser'
-    | '/slet-data'
+    | '/privatlivspolitik'
     | '/setup-2fa'
+    | '/sikkerhed'
+    | '/slet-data'
+    | '/superadmin'
     | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
     | '/app/logning'
+    | '/checkout/annulleret'
+    | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
@@ -253,18 +275,20 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/priser'
+    | '/privatlivspolitik'
+    | '/setup-2fa'
     | '/signup'
     | '/sikkerhed'
-    | '/superadmin'
-    | '/privatlivspolitik'
-    | '/priser'
     | '/slet-data'
-    | '/setup-2fa'
+    | '/superadmin'
     | '/verify-2fa'
     | '/app/admin'
     | '/app/aktiviteter'
     | '/app/arkiv'
     | '/app/logning'
+    | '/checkout/annulleret'
+    | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
@@ -277,23 +301,25 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRouteWithChildren
+  PriserRoute: typeof PriserRoute
+  PrivatlivspolitikRoute: typeof PrivatlivspolitikRoute
+  Setup2faRoute: typeof Setup2faRoute
   SignupRoute: typeof SignupRouteWithChildren
   SikkerhedRoute: typeof SikkerhedRoute
-  SuperadminRoute: typeof SuperadminRoute
-  PrivatlivspolitikRoute: typeof PrivatlivspolitikRoute
-  PriserRoute: typeof PriserRoute
   SletDataRoute: typeof SletDataRoute
-  SetupTwoFaRoute: typeof SetupTwoFaRoute
-  VerifyTwoFaRoute: typeof VerifyTwoFaRoute
+  SuperadminRoute: typeof SuperadminRoute
+  Verify2faRoute: typeof Verify2faRoute
+  CheckoutAnnulleretRoute: typeof CheckoutAnnulleretRoute
+  CheckoutSuccesRoute: typeof CheckoutSuccesRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sikkerhed': {
-      id: '/sikkerhed'
-      path: '/sikkerhed'
-      fullPath: '/sikkerhed'
-      preLoaderRoute: typeof SikkerhedRouteImport
+    '/verify-2fa': {
+      id: '/verify-2fa'
+      path: '/verify-2fa'
+      fullPath: '/verify-2fa'
+      preLoaderRoute: typeof Verify2faRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/superadmin': {
@@ -301,6 +327,34 @@ declare module '@tanstack/react-router' {
       path: '/superadmin'
       fullPath: '/superadmin'
       preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/slet-data': {
+      id: '/slet-data'
+      path: '/slet-data'
+      fullPath: '/slet-data'
+      preLoaderRoute: typeof SletDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sikkerhed': {
+      id: '/sikkerhed'
+      path: '/sikkerhed'
+      fullPath: '/sikkerhed'
+      preLoaderRoute: typeof SikkerhedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup-2fa': {
+      id: '/setup-2fa'
+      path: '/setup-2fa'
+      fullPath: '/setup-2fa'
+      preLoaderRoute: typeof Setup2faRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privatlivspolitik': {
@@ -315,34 +369,6 @@ declare module '@tanstack/react-router' {
       path: '/priser'
       fullPath: '/priser'
       preLoaderRoute: typeof PriserRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/slet-data': {
-      id: '/slet-data'
-      path: '/slet-data'
-      fullPath: '/slet-data'
-      preLoaderRoute: typeof SletDataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup-2fa': {
-      id: '/setup-2fa'
-      path: '/setup-2fa'
-      fullPath: '/setup-2fa'
-      preLoaderRoute: typeof SetupTwoFaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify-2fa': {
-      id: '/verify-2fa'
-      path: '/verify-2fa'
-      fullPath: '/verify-2fa'
-      preLoaderRoute: typeof VerifyTwoFaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -407,6 +433,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/login/admin'
       preLoaderRoute: typeof LoginAdminRouteImport
       parentRoute: typeof LoginRoute
+    }
+    '/checkout/succes': {
+      id: '/checkout/succes'
+      path: '/checkout/succes'
+      fullPath: '/checkout/succes'
+      preLoaderRoute: typeof CheckoutSuccesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout/annulleret': {
+      id: '/checkout/annulleret'
+      path: '/checkout/annulleret'
+      fullPath: '/checkout/annulleret'
+      preLoaderRoute: typeof CheckoutAnnulleretRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/logning': {
       id: '/app/logning'
@@ -488,24 +528,17 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRouteWithChildren,
+  PriserRoute: PriserRoute,
+  PrivatlivspolitikRoute: PrivatlivspolitikRoute,
+  Setup2faRoute: Setup2faRoute,
   SignupRoute: SignupRouteWithChildren,
   SikkerhedRoute: SikkerhedRoute,
-  SuperadminRoute: SuperadminRoute,
-  PrivatlivspolitikRoute: PrivatlivspolitikRoute,
-  PriserRoute: PriserRoute,
   SletDataRoute: SletDataRoute,
-  SetupTwoFaRoute: SetupTwoFaRoute,
-  VerifyTwoFaRoute: VerifyTwoFaRoute,
+  SuperadminRoute: SuperadminRoute,
+  Verify2faRoute: Verify2faRoute,
+  CheckoutAnnulleretRoute: CheckoutAnnulleretRoute,
+  CheckoutSuccesRoute: CheckoutSuccesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
