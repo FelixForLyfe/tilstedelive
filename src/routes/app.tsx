@@ -34,7 +34,7 @@ function TrialBanner({ daysLeft }: { daysLeft: number }) {
         : "bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-400"
     }`}>
       {urgent ? "⚠️" : "⏳"}{" "}
-      Du har <strong>{daysLeft} {daysLeft === 1 ? "dag" : "dage"}</strong> tilbage af din gratis prøveperiode.{" "}
+      Du har <strong>{daysLeft} {daysLeft === 1 ? "dag" : "dage"}</strong> tilbage af din 7-dages gratis prøveperiode.{" "}
       <Link to="/priser" className="underline hover:opacity-80">Vælg en plan →</Link>
     </div>
   );

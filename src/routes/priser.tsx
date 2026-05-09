@@ -283,7 +283,7 @@ function PriserSide() {
           {[
             {
               q: "Hvad sker der efter prøveperioden?",
-              a: "Når de 30 dage er gået, spærres adgang til appen. Du vælger en plan og betaler via Stripe — herefter åbnes adgangen med det samme. Dine data og historik er bevaret.",
+              a: "Når de 7 dage er gået, spærres adgang til appen. Du vælger en plan og betaler via Stripe — herefter åbnes adgangen med det samme. Dine data og historik er bevaret.",
             },
             {
               q: "Kan jeg skifte plan undervejs?",
@@ -321,7 +321,7 @@ function PriserSide() {
             to="/signup"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
           >
-            Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
+            Start 7 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </section>

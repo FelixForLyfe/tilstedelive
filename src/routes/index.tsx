@@ -121,7 +121,7 @@ function Forside() {
             to="/signup"
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:scale-[1.02]"
           >
-            Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
+            Start 7 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
           </Link>
           <Link
             to="/login/personale"
@@ -133,7 +133,7 @@ function Forside() {
 
         {/* Trust badges */}
         <div className="mx-auto mt-10 flex flex-wrap justify-center gap-4 text-xs text-muted-foreground">
-          {["30 dages gratis prøveperiode", "Ingen kreditkort krævet", "GDPR-compliant", "Dansk support"].map((t) => (
+          {["7 dages gratis prøveperiode", "Ingen kreditkort krævet", "GDPR-compliant", "Dansk support"].map((t) => (
             <span key={t} className="flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" /> {t}
             </span>
@@ -231,7 +231,7 @@ function Forside() {
               to="/signup"
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
             >
-              Start 30 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
+              Start 7 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />
             </Link>
             <Link
               to="/priser"

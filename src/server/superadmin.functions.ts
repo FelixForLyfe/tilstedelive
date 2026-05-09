@@ -47,10 +47,10 @@ export const superadminListOrgs = createServerFn({ method: "POST" })
     const user = await verifySuperadmin(data.accessToken);
     await auditLog(user.id, "SUPERADMIN_VISIT");
 
-    const { data: orgs, error } = await supabaseAdmin
+    const { data: orgs, error } = await (supabaseAdmin as any)
       .from("organizations")
       .select(
-        "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id",
+        "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id, gratis_reason",
       )
       .order("created_at", { ascending: false });
 
@@ -58,10 +58,10 @@ export const superadminListOrgs = createServerFn({ method: "POST" })
     return orgs ?? [];
   });
 
-// ─── Update org subscription ──────────────────────────────────────────────────
+// ─── Update org subscription (tier / trial date) ──────────────────────────────
 
 const TIERS = ["gratis", "basis", "pro", "organisation", "kommune", "special"] as const;
-const STATUSES = ["active", "past_due", "canceled", "trialing", "expired"] as const;
+const STATUSES = ["active", "past_due", "canceled", "trialing", "expired", "gratis"] as const;
 
 export const superadminUpdateOrg = createServerFn({ method: "POST" })
   .inputValidator((d) =>
@@ -85,7 +85,7 @@ export const superadminUpdateOrg = createServerFn({ method: "POST" })
 
     if (Object.keys(patch).length === 0) return { success: true };
 
-    const { error } = await supabaseAdmin
+    const { error } = await (supabaseAdmin as any)
       .from("organizations")
       .update(patch)
       .eq("id", data.orgId);
@@ -96,7 +96,215 @@ export const superadminUpdateOrg = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-// ─── List users (minimal data — email + org + role only) ─────────────────────
+// ─── Extend trial ─────────────────────────────────────────────────────────────
+
+export const superadminExtendTrial = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        orgId: z.string().uuid(),
+        newTrialEndsAt: z.string().min(1),
+        reason: z.string().trim().min(5, "Angiv venligst en årsag (min. 5 tegn)"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { data: org } = await (supabaseAdmin as any)
+      .from("organizations")
+      .select("trial_ends_at, subscription_status")
+      .eq("id", data.orgId)
+      .single();
+
+    const { error } = await (supabaseAdmin as any)
+      .from("organizations")
+      .update({ trial_ends_at: data.newTrialEndsAt, subscription_status: "trialing" })
+      .eq("id", data.orgId);
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_EXTEND_TRIAL", data.orgId, {
+      old_trial_ends_at: org?.trial_ends_at ?? null,
+      new_trial_ends_at: data.newTrialEndsAt,
+      reason: data.reason,
+    });
+
+    return { success: true };
+  });
+
+// ─── Set subscription status override ────────────────────────────────────────
+
+export const superadminSetOrgStatus = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        orgId: z.string().uuid(),
+        subscriptionStatus: z.enum(STATUSES),
+        gratisReason: z.string().trim().optional(),
+        reason: z.string().trim().min(5, "Angiv venligst en årsag (min. 5 tegn)"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { data: org } = await (supabaseAdmin as any)
+      .from("organizations")
+      .select("subscription_status")
+      .eq("id", data.orgId)
+      .single();
+
+    const patch: Record<string, unknown> = { subscription_status: data.subscriptionStatus };
+    if (data.subscriptionStatus === "gratis" && data.gratisReason) {
+      patch.gratis_reason = data.gratisReason;
+    }
+
+    const { error } = await (supabaseAdmin as any)
+      .from("organizations")
+      .update(patch)
+      .eq("id", data.orgId);
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_SET_STATUS", data.orgId, {
+      old_status: org?.subscription_status ?? null,
+      new_status: data.subscriptionStatus,
+      gratis_reason: data.gratisReason ?? null,
+      reason: data.reason,
+    });
+
+    return { success: true };
+  });
+
+// ─── Dashboard data ───────────────────────────────────────────────────────────
+
+export const superadminGetDashboard = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const [
+      { data: orgs },
+      { data: members },
+      { count: totalAttendance },
+      { count: totalTimeLogs },
+    ] = await Promise.all([
+      (supabaseAdmin as any)
+        .from("organizations")
+        .select("id, name, org_type, subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, created_at, gratis_reason")
+        .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("organization_members")
+        .select("organization_id, user_id")
+        .eq("status", "active"),
+      supabaseAdmin
+        .from("attendance_records")
+        .select("*", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("employee_time_logs")
+        .select("*", { count: "exact", head: true }),
+    ]);
+
+    // Org → member count map
+    const orgMemberCounts: Record<string, number> = {};
+    for (const m of members ?? []) {
+      orgMemberCounts[m.organization_id] = (orgMemberCounts[m.organization_id] ?? 0) + 1;
+    }
+
+    // Monthly costs (last 24 months)
+    let costs: unknown[] = [];
+    try {
+      const { data: c } = await (supabaseAdmin as any)
+        .from("monthly_costs")
+        .select("id, month, category, amount_dkk, note")
+        .order("month", { ascending: false })
+        .limit(24);
+      costs = c ?? [];
+    } catch {
+      // table may not exist in older environments
+    }
+
+    return {
+      orgs: (orgs ?? []) as DashboardOrg[],
+      orgMemberCounts,
+      totalMembers: (members ?? []).length,
+      totalAttendanceRecords: totalAttendance ?? 0,
+      totalTimeLogs: totalTimeLogs ?? 0,
+      costs: costs as MonthlyCost[],
+    };
+  });
+
+// Re-export these types so the route can import them
+export type DashboardOrg = {
+  id: string;
+  name: string;
+  org_type: string;
+  subscription_tier: string;
+  subscription_status: string;
+  trial_ends_at: string | null;
+  stripe_customer_id: string | null;
+  created_at: string;
+  gratis_reason: string | null;
+};
+
+export type MonthlyCost = {
+  id: string;
+  month: string;
+  category: string;
+  amount_dkk: number;
+  note: string | null;
+};
+
+// ─── Save monthly costs ───────────────────────────────────────────────────────
+
+export const superadminSaveMonthlyCosts = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        month: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato (forventet YYYY-MM-DD)"),
+        costs: z
+          .array(
+            z.object({
+              category: z.string().trim().min(1),
+              amount_dkk: z.number().int().min(0),
+              note: z.string().optional(),
+            }),
+          )
+          .max(20),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    await (supabaseAdmin as any).from("monthly_costs").delete().eq("month", data.month);
+
+    if (data.costs.length > 0) {
+      const { error } = await (supabaseAdmin as any).from("monthly_costs").insert(
+        data.costs.map((c) => ({
+          month: data.month,
+          category: c.category,
+          amount_dkk: c.amount_dkk,
+          note: c.note ?? null,
+        })),
+      );
+      if (error) throw new Error(error.message);
+    }
+
+    await auditLog(admin.id, "SUPERADMIN_SAVE_COSTS", null, {
+      month: data.month,
+      entries: data.costs.length,
+      total_dkk: data.costs.reduce((s, c) => s + c.amount_dkk, 0),
+    });
+
+    return { success: true };
+  });
+
+// ─── List users ───────────────────────────────────────────────────────────────
 
 export const superadminListUsers = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
@@ -112,7 +320,6 @@ export const superadminListUsers = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    // Fetch emails in a separate batch to avoid cross-schema join complexity
     const userIds = [...new Set((members ?? []).map((m) => m.user_id))];
     const { data: profiles } = userIds.length
       ? await supabaseAdmin.from("profiles").select("id, email").in("id", userIds)
@@ -204,7 +411,6 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await verifySuperadmin(data.accessToken);
 
-    // Collision is astronomically unlikely but retry once if it happens
     let code = generateCode();
     let inserted = false;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -214,7 +420,7 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
         created_by: user.id,
       });
       if (!error) { inserted = true; break; }
-      if (error.code !== "23505") throw new Error(error.message); // not a dupe
+      if (error.code !== "23505") throw new Error(error.message);
       code = generateCode();
     }
     if (!inserted) throw new Error("Kunne ikke generere unik nøgle. Prøv igen.");
@@ -243,7 +449,6 @@ export const superadminListAuditLog = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    // Resolve org names in one batch
     const orgIds = [
       ...new Set(
         (logs ?? []).filter((l: any) => l.org_id).map((l: any) => l.org_id as string),
