@@ -24,6 +24,12 @@ import {
   Save,
   Layers,
   CalendarDays,
+  Mail,
+  MailOpen,
+  Send,
+  Reply,
+  ArrowLeft,
+  AlertCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -190,6 +196,7 @@ const TABS = [
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
   { id: "misc", label: "Misc. Planer", icon: Layers },
+  { id: "support", label: "Support", icon: Mail },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -219,6 +226,8 @@ function SuperadminPanel() {
   const [checking, setChecking] = useState(true);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+
+  const [supportUnread, setSupportUnread] = useState(0);
 
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(false);
@@ -289,16 +298,22 @@ function SuperadminPanel() {
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const aktiv = activeTab === tab.id;
+            const badge = tab.id === "support" && supportUnread > 0 ? supportUnread : 0;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
+                className={`relative flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
                   aktiv ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
+                {badge > 0 && (
+                  <span className="ml-0.5 min-w-[18px] rounded-full bg-destructive px-1 py-0.5 text-center text-[10px] font-bold leading-none text-destructive-foreground">
+                    {badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -311,6 +326,9 @@ function SuperadminPanel() {
         {activeTab === "users" && <UsersTab accessToken={accessToken} />}
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
+        {activeTab === "support" && (
+          <SupportTab accessToken={accessToken} onUnreadCount={setSupportUnread} />
+        )}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -1656,6 +1674,365 @@ function CustomPlanModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Support inbox tab ────────────────────────────────────────────────────────
+
+type EmailSummary = {
+  id: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  date: string;
+  snippet: string;
+  isUnread: boolean;
+  messageId: string;
+};
+
+type EmailDetail = EmailSummary & {
+  to: string;
+  body: { text: string; html: string };
+  references: string;
+  orgName: string | null;
+};
+
+function parseSender(from: string): { name: string; email: string } {
+  const match = from.match(/^"?([^"<]+?)"?\s*<([^>]+)>$/);
+  if (match) return { name: match[1].trim(), email: match[2].trim() };
+  return { name: from, email: from };
+}
+
+function fmtEmailDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isSameDay =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    return isSameDay
+      ? d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString("da-DK", { day: "2-digit", month: "short" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function SupportTab({
+  accessToken,
+  onUnreadCount,
+}: {
+  accessToken: string;
+  onUnreadCount: (n: number) => void;
+}) {
+  const [emails, setEmails] = useState<EmailSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<EmailDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [showHtml, setShowHtml] = useState(false);
+
+  const invoke = useCallback(
+    async (action: string, extra?: Record<string, unknown>) => {
+      const { data, error: fnErr } = await supabase.functions.invoke("gmail-proxy", {
+        body: { action, ...extra },
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    [accessToken],
+  );
+
+  const loadInbox = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await invoke("list");
+      setEmails(result.messages ?? []);
+      onUnreadCount(result.unreadCount ?? 0);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [invoke, onUnreadCount]);
+
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+
+  const openEmail = async (summary: EmailSummary) => {
+    setDetailLoading(true);
+    setSelected(null);
+    setReplyOpen(false);
+    setReplyText("");
+    setShowHtml(false);
+    try {
+      const detail = await invoke("get", { id: summary.id });
+      setSelected(detail as EmailDetail);
+      if (summary.isUnread) {
+        await invoke("markRead", { id: summary.id }).catch(() => {});
+        setEmails((prev) =>
+          prev.map((e) => (e.id === summary.id ? { ...e, isUnread: false } : e)),
+        );
+        onUnreadCount(Math.max(0, emails.filter((e) => e.isUnread).length - 1));
+      }
+    } catch (err: any) {
+      toast.error("Kunne ikke åbne email: " + err.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const sendReply = async () => {
+    if (!selected || !replyText.trim()) return;
+    setSending(true);
+    try {
+      const { email } = parseSender(selected.from);
+      const subject = selected.subject.startsWith("Re:") ? selected.subject : `Re: ${selected.subject}`;
+      await invoke("send", {
+        to: email,
+        subject,
+        body: replyText.trim(),
+        inReplyTo: selected.messageId,
+        references: selected.references || selected.messageId,
+      });
+      toast.success("Svar sendt");
+      setReplyOpen(false);
+      setReplyText("");
+    } catch (err: any) {
+      toast.error("Kunne ikke sende svar: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── Not configured state ─────────────────────────────────────────────────────
+  if (!loading && error?.includes("Gmail ikke konfigureret")) {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-display text-xl font-bold">Support-inbox</h2>
+        <div className="glass rounded-2xl p-8 text-center">
+          <AlertCircle className="mx-auto mb-4 h-10 w-10 text-warning" />
+          <p className="font-semibold">Gmail ikke konfigureret endnu</p>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+            Tilføj Google OAuth-credentials til Supabase secrets for at aktivere support-indbakken.
+            Se setup-guide nedenfor.
+          </p>
+          <div className="mt-6 text-left max-w-lg mx-auto glass rounded-xl p-4 text-xs font-mono text-muted-foreground space-y-1">
+            <p className="font-sans text-xs font-semibold text-foreground mb-2">Setup (kør én gang i terminalen):</p>
+            <p>supabase secrets set GMAIL_CLIENT_ID=&lt;fra Google Cloud&gt;</p>
+            <p>supabase secrets set GMAIL_CLIENT_SECRET=&lt;fra Google Cloud&gt;</p>
+            <p>supabase secrets set GMAIL_REFRESH_TOKEN=&lt;fra OAuth Playground&gt;</p>
+            <p className="mt-2 font-sans font-medium text-foreground">Derefter:</p>
+            <p>supabase functions deploy gmail-proxy</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Detail view ──────────────────────────────────────────────────────────────
+  if (detailLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Indlæser email…
+      </div>
+    );
+  }
+
+  if (selected) {
+    const sender = parseSender(selected.from);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelected(null)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm hover:bg-surface-elevated"
+          >
+            <ArrowLeft className="h-4 w-4" /> Indbakke
+          </button>
+          <h2 className="font-display text-lg font-bold line-clamp-1 flex-1">{selected.subject}</h2>
+        </div>
+
+        <div className="glass rounded-2xl">
+          {/* Header */}
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-semibold">{sender.name !== sender.email ? sender.name : sender.email}</p>
+                <p className="text-xs text-muted-foreground">{sender.email}</p>
+                {selected.orgName && (
+                  <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {selected.orgName}
+                  </span>
+                )}
+              </div>
+              <p className="shrink-0 text-xs text-muted-foreground">{fmtTidspunkt(new Date(selected.date).toISOString())}</p>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Til: {selected.to}</p>
+          </div>
+
+          {/* Body */}
+          <div className="px-5 py-4">
+            {selected.body.text || selected.body.html ? (
+              <>
+                {showHtml && selected.body.html ? (
+                  <iframe
+                    srcDoc={selected.body.html}
+                    sandbox="allow-same-origin"
+                    className="h-96 w-full rounded-lg border border-border bg-white"
+                    title="Email HTML"
+                  />
+                ) : (
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+                    {selected.body.text || "(Ingen tekstversion — se HTML nedenfor)"}
+                  </pre>
+                )}
+                {selected.body.html && (
+                  <button
+                    onClick={() => setShowHtml((v) => !v)}
+                    className="mt-3 text-xs text-primary hover:underline"
+                  >
+                    {showHtml ? "Vis som tekst" : "Vis HTML-version"}
+                  </button>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">(Tomt indhold)</p>
+            )}
+          </div>
+
+          {/* Reply */}
+          <div className="border-t border-border px-5 py-4">
+            {replyOpen ? (
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Svar til {sender.email} · fra support@tilstede.live
+                </p>
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={6}
+                  placeholder="Skriv dit svar…"
+                  className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setReplyOpen(false); setReplyText(""); }}
+                    className="rounded-xl border border-border bg-surface px-4 py-2 text-sm hover:bg-surface-elevated"
+                  >
+                    Annullér
+                  </button>
+                  <button
+                    onClick={sendReply}
+                    disabled={sending || !replyText.trim()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                  >
+                    <Send className="h-4 w-4" />
+                    {sending ? "Sender…" : "Send svar"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setReplyOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-elevated"
+              >
+                <Reply className="h-4 w-4" /> Svar
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground opacity-60">
+          Emails behandles i overensstemmelse med GDPR og opbevares udelukkende i Google Workspace
+        </p>
+      </div>
+    );
+  }
+
+  // ── Inbox list ───────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Support-inbox</h2>
+          <p className="text-sm text-muted-foreground">support@tilstede.live · hentes live fra Gmail</p>
+        </div>
+        <button
+          onClick={loadInbox}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Opdater
+        </button>
+      </div>
+
+      {error && !loading && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="glass overflow-hidden rounded-2xl">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Henter emails…
+          </div>
+        ) : emails.length === 0 ? (
+          <div className="py-16 text-center text-muted-foreground">
+            <Mail className="mx-auto mb-3 h-8 w-8 opacity-30" />
+            Ingen emails i indbakken
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {emails.map((email) => {
+              const sender = parseSender(email.from);
+              return (
+                <li key={email.id}>
+                  <button
+                    onClick={() => openEmail(email)}
+                    className={`flex w-full items-start gap-4 px-5 py-4 text-left transition hover:bg-surface/60 ${
+                      email.isUnread ? "bg-primary/5" : ""
+                    }`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {email.isUnread
+                        ? <Mail className="h-4 w-4 text-primary" />
+                        : <MailOpen className="h-4 w-4 text-muted-foreground opacity-50" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className={`truncate text-sm ${email.isUnread ? "font-bold" : "font-medium"}`}>
+                          {sender.name !== sender.email ? sender.name : sender.email}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{fmtEmailDate(email.date)}</span>
+                      </div>
+                      <p className={`truncate text-sm ${email.isUnread ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                        {email.subject}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground opacity-70">
+                        {email.snippet}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-muted-foreground opacity-60">
+        Emails behandles i overensstemmelse med GDPR og opbevares udelukkende i Google Workspace
+      </p>
     </div>
   );
 }
