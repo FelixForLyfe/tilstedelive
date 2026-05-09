@@ -301,12 +301,30 @@ All data written to the PostgreSQL database is encrypted at rest by the underlyi
 | Server ↔ Supabase API | TLS 1.2+ (same endpoint) |
 | Vercel edge ↔ browser | TLS 1.2+ with HSTS |
 
-The application's Content Security Policy (`src/lib/security-headers.ts`) includes:
-```
-Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
-```
+`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` is sent on every response, forcing HTTPS permanently once the browser has seen the header. The domain is eligible for browser HSTS preload lists.
 
-This forces HTTPS permanently for all connections once the browser has seen the header.
+### HTTP security headers
+
+Security headers are enforced at two layers so that both SSR-rendered HTML and static assets (JS, CSS, images, manifest) are covered:
+
+**Layer 1 — `vercel.json` headers block**
+Applied by Vercel's edge to **every response before routing**, including static files served directly from the CDN that never reach the SSR function.
+
+**Layer 2 — `src/lib/security-headers.ts`**
+Applied by the TanStack Start server for SSR-rendered routes via `setResponseHeaders` inside the root `beforeLoad` hook. These overlap with the `vercel.json` headers and allow future route-specific customisation (e.g. per-route CSP nonces).
+
+| Header | Value | Purpose |
+|--------|-------|---------|
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` | Restricts which origins can load resources. `frame-ancestors 'none'` prevents the page from being embedded (clickjacking). `object-src 'none'` blocks Flash/plugins. |
+| `X-Frame-Options` | `DENY` | Clickjacking protection for older browsers that do not understand CSP `frame-ancestors`. |
+| `X-Content-Type-Options` | `nosniff` | Prevents browsers from MIME-sniffing responses away from the declared `Content-Type`, blocking content-type confusion attacks. |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Sends full path to same-origin requests; sends only the origin to cross-origin HTTPS; sends nothing to HTTP. Prevents URL leakage. |
+| `Permissions-Policy` | `camera=(self), microphone=(), geolocation=()` | Restricts browser feature access. Camera is allowed for the app itself; microphone and geolocation are fully disabled. |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | Enforces HTTPS for 2 years across all subdomains. |
+| `Cross-Origin-Resource-Policy` | `same-origin` | Prevents other origins from loading these resources in no-cors mode — blocks hotlinking of images, JS, and CSS from third-party sites. |
+| `Cross-Origin-Opener-Policy` | `same-origin` | Isolates the browsing context from cross-origin popups and windows, preventing cross-origin `window.opener` attacks. |
+
+> **Note on static asset CORS:** Vercel's CDN adds `Access-Control-Allow-Origin: *` to static files at the platform level — this cannot be overridden via `vercel.json`. It is intentional CDN behaviour for publicly cacheable assets and does not expose sensitive data. `Cross-Origin-Resource-Policy: same-origin` provides the meaningful browser-level cross-domain protection.
 
 ### Application-level encryption
 
@@ -329,6 +347,18 @@ See [Section 6](#6-security-considerations--recommendations) for recommendations
 ---
 
 ## 6. Security Considerations & Recommendations
+
+### Scanner / linter findings
+
+| Finding | Tool | Status | Resolution |
+|---------|------|--------|------------|
+| Content Security Policy header not set | OWASP ZAP | ✅ Resolved | CSP applied via `vercel.json` to all responses including static assets |
+| Missing anti-clickjacking header | OWASP ZAP | ✅ Resolved | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` applied via `vercel.json` |
+| X-Content-Type-Options header missing | OWASP ZAP | ✅ Resolved | `X-Content-Type-Options: nosniff` applied via `vercel.json` |
+| Cross-domain misconfiguration | OWASP ZAP | ✅ Resolved | `Cross-Origin-Resource-Policy: same-origin` applied via `vercel.json` |
+| `is_org_member` / `is_org_admin` / `is_day_closed` SECURITY DEFINER | Supabase linter | ✅ Resolved | Moved to `private` schema (invisible to PostgREST REST API) |
+| `redeem_invite` SECURITY DEFINER callable by authenticated | Supabase linter | ✅ Resolved | Converted to SECURITY INVOKER (migration `20260509130000`) |
+| Leaked password protection disabled | Supabase linter | ⚠️ Action required | Must be toggled in the Supabase dashboard (see below) |
 
 ### Leaked password protection (action required)
 
