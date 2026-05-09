@@ -23,7 +23,8 @@ type Tildeling = {
 
 function AktiviteterSide() {
   const { user } = useAuth();
-  const { aktivOrgId } = useOrg();
+  const { aktivOrgId, terms } = useOrg();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const dato = dagensDato();
   const [aktiviteter, setAktiviteter] = useState<Aktivitet[]>([]);
   const [tilstede, setTilstede] = useState<Barn[]>([]);
@@ -198,19 +199,19 @@ function AktiviteterSide() {
 
               {/* Tilføj tilstedeværende børn */}
               <div>
-                <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Tilføj barn</p>
+                <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Tilføj {terms.deltager}</p>
                 <div className="relative mb-2">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="search"
                     value={soegning}
                     onChange={(e) => setSoegning(e.target.value)}
-                    placeholder="Søg blandt tilstedeværende…"
+                    placeholder={`Søg blandt tilstedeværende ${terms.deltagere}…`}
                     className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
                   />
                 </div>
                 {filtreredeBoern.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Ingen tilstedeværende børn matcher.</p>
+                  <p className="text-sm text-muted-foreground">Ingen tilstedeværende {terms.deltagere} matcher.</p>
                 ) : (
                   <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                     {filtreredeBoern.map((b) => {

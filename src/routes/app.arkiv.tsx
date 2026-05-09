@@ -21,7 +21,8 @@ type DagligLog = {
 };
 
 function ArkivSide() {
-  const { aktivOrgId, aktivOrg, erAdmin } = useOrg();
+  const { aktivOrgId, aktivOrg, erAdmin, terms } = useOrg();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const [logs, setLogs] = useState<DagligLog[]>([]);
   const [valgt, setValgt] = useState<DagligLog | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,12 +138,12 @@ function ArkivSide() {
     skil(20);
 
     const fremmoede = (log.attendance_snapshot ?? []) as any[];
-    linje(`Fremmøde (${fremmoede.length} børn — ${log.total_children_present} mødte ind)`, 13, true);
+    linje(`Fremmøde (${fremmoede.length} ${terms.deltagere} — ${log.total_children_present} mødte ind)`, 13, true);
     skil(4);
     if (fremmoede.length === 0) linje("— ingen registreringer", 10);
     for (const r of fremmoede) {
       const dele = [
-        r.child_name ?? "Barn",
+        r.child_name ?? cap(terms.deltager),
         statusLabel(r.status),
         r.checked_in_at && `ind ${tid(r.checked_in_at)}`,
         r.checked_out_at && `ud ${tid(r.checked_out_at)}`,
@@ -216,7 +217,7 @@ function ArkivSide() {
                 <div>
                   <p className="font-semibold">{formatDansk(log.date)}</p>
                   <p className="text-xs text-muted-foreground">
-                    Lukket {new Date(log.closed_at).toLocaleString("da-DK")} · {log.total_children_present} børn
+                    Lukket {new Date(log.closed_at).toLocaleString("da-DK")} · {log.total_children_present} {terms.deltagere}
                   </p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -246,6 +247,8 @@ function ArkivSide() {
 }
 
 function DagDetalje({ log, onLuk, onPDF, onSlet }: { log: DagligLog; onLuk: () => void; onPDF: () => void; onSlet: () => void }) {
+  const { terms } = useOrg();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const fremmoede = (log.attendance_snapshot ?? []) as any[];
   const aktiviteter = (log.activities_snapshot ?? []) as any[];
   const vagter = (log.employee_time_snapshot ?? []) as any[];
@@ -274,14 +277,14 @@ function DagDetalje({ log, onLuk, onPDF, onSlet }: { log: DagligLog; onLuk: () =
           </div>
         </div>
 
-        <Sektion icon={Users} titel={`Fremmøde (${fremmoede.length})`}>
+        <Sektion icon={Users} titel={`Fremmøde — ${fremmoede.length} ${terms.deltagere}`}>
           {fremmoede.length === 0 ? (
             <Tom>Ingen registreringer</Tom>
           ) : (
             <div className="grid gap-1.5">
               {fremmoede.map((r, i) => (
                 <div key={i} className="flex items-center justify-between rounded-lg bg-surface/60 px-3 py-2 text-sm">
-                  <span>{r.child_name ?? "Barn"}</span>
+                  <span>{r.child_name ?? cap(terms.deltager)}</span>
                   <span className="text-xs text-muted-foreground">
                     {statusLabel(r.status)}
                     {r.checked_in_at && ` · ind ${tid(r.checked_in_at)}`}

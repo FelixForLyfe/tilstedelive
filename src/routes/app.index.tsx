@@ -25,7 +25,8 @@ type Fremmoede = {
 
 function Hovedside() {
   const { user } = useAuth();
-  const { aktivOrgId, erAdmin } = useOrg();
+  const { aktivOrgId, erAdmin, terms } = useOrg();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const dato = dagensDato();
   const [kategorier, setKategorier] = useState<Kategori[]>([]);
   const [boern, setBoern] = useState<Barn[]>([]);
@@ -217,7 +218,7 @@ function Hovedside() {
             <p className="mt-1 font-display text-6xl font-black tracking-tight">
               <span className="bg-gradient-primary bg-clip-text text-transparent">{tilstedeAntal}</span>
             </p>
-            <p className="text-sm text-muted-foreground">af {boern.length} børn</p>
+            <p className="text-sm text-muted-foreground">af {boern.length} {terms.deltagere}</p>
           </div>
           {dagLukket && (
             <div className="flex items-center gap-2 rounded-xl bg-warning/15 px-3 py-2 text-sm font-medium text-warning">
@@ -240,13 +241,13 @@ function Hovedside() {
             type="search"
             value={soegning}
             onChange={(e) => setSoegning(e.target.value)}
-            placeholder="Søg efter barn…"
+            placeholder={`Søg efter ${terms.deltager}…`}
             className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
           />
         </div>
         <select value={valgtKategori} onChange={(e) => setValgtKategori(e.target.value)}
           className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium">
-          <option value="alle">Alle kategorier ({boern.length})</option>
+          <option value="alle">Alle {terms.grupper} ({boern.length})</option>
           {kategorier.map((k) => {
             const antal = boern.filter((b) => b.category_id === k.id).length;
             return <option key={k.id} value={k.id}>{k.name} ({antal})</option>;
@@ -257,7 +258,7 @@ function Hovedside() {
           type="button"
           onClick={() => setKunTilstede((v) => !v)}
           aria-pressed={kunTilstede}
-          title={kunTilstede ? "Vis alle børn" : "Vis kun børn der er tilstede"}
+          title={kunTilstede ? `Vis alle ${terms.deltagere}` : `Vis kun ${terms.deltagere} der er tilstede`}
           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition ${
             kunTilstede
               ? "border-success/40 bg-success/15 text-success"
@@ -271,7 +272,7 @@ function Hovedside() {
 
       {filtrede.length === 0 ? (
         <div className="glass rounded-2xl p-10 text-center text-muted-foreground">
-          Ingen børn endnu. {erAdmin ? "Gå til Admin og tilføj børn." : "Bed en admin om at tilføje børn."}
+          Ingen {terms.deltagere} endnu. {erAdmin ? `Gå til Admin og tilføj ${terms.deltagere}.` : `Bed en admin om at tilføje ${terms.deltagere}.`}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -300,7 +301,7 @@ function Hovedside() {
                       )}
                       {status === "picked_up" && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
-                          Gået hjem
+                          {cap(terms.hjemsendelse)}
                         </span>
                       )}
                       {f?.checked_in_at && status !== "absent" && (
@@ -325,7 +326,7 @@ function Hovedside() {
                   </button>
                   <button disabled={dagLukket} onClick={() => skiftStatus(b, "picked_up")}
                     className={`rounded-lg py-2 text-[10px] font-semibold transition ${status === "picked_up" ? "bg-foreground text-background" : "bg-surface hover:bg-surface-elevated"} disabled:opacity-50`}>
-                    Hjem
+                    {cap(terms.tjekUd)}
                   </button>
                 </div>
 
