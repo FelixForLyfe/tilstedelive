@@ -315,16 +315,23 @@ Applied by the TanStack Start server for SSR-rendered routes via `setResponseHea
 
 | Header | Value | Purpose |
 |--------|-------|---------|
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` | Restricts which origins can load resources. `frame-ancestors 'none'` prevents the page from being embedded (clickjacking). `object-src 'none'` blocks Flash/plugins. |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://tilstedelive.vercel.app; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` | Restricts which origins can load resources. `frame-ancestors 'none'` prevents the page from being embedded (clickjacking). `object-src 'none'` blocks Flash/plugins. `img-src https:` permits loading icons and images from Supabase Storage. |
 | `X-Frame-Options` | `DENY` | Clickjacking protection for older browsers that do not understand CSP `frame-ancestors`. |
 | `X-Content-Type-Options` | `nosniff` | Prevents browsers from MIME-sniffing responses away from the declared `Content-Type`, blocking content-type confusion attacks. |
+| `X-XSS-Protection` | `1; mode=block` | Enables the browser's built-in XSS filter (legacy IE/Edge). Redundant with a strict CSP but harmless on modern browsers. |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Sends full path to same-origin requests; sends only the origin to cross-origin HTTPS; sends nothing to HTTP. Prevents URL leakage. |
 | `Permissions-Policy` | `camera=(self), microphone=(), geolocation=()` | Restricts browser feature access. Camera is allowed for the app itself; microphone and geolocation are fully disabled. |
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | Enforces HTTPS for 2 years across all subdomains. |
 | `Cross-Origin-Resource-Policy` | `same-origin` | Prevents other origins from loading these resources in no-cors mode — blocks hotlinking of images, JS, and CSS from third-party sites. |
 | `Cross-Origin-Opener-Policy` | `same-origin` | Isolates the browsing context from cross-origin popups and windows, preventing cross-origin `window.opener` attacks. |
+| `Access-Control-Allow-Origin` | `https://tilstedelive.vercel.app` | Restricts CORS access to the app's own origin, overriding Vercel CDN's default wildcard on static assets. |
+| `Cache-Control` | `no-cache, no-store, must-revalidate, max-age=0` | Prevents browsers and CDN from caching responses, ensuring users always receive the latest version of every resource. |
 
-> **Note on static asset CORS:** Vercel's CDN adds `Access-Control-Allow-Origin: *` to static files at the platform level — this cannot be overridden via `vercel.json`. It is intentional CDN behaviour for publicly cacheable assets and does not expose sensitive data. `Cross-Origin-Resource-Policy: same-origin` provides the meaningful browser-level cross-domain protection.
+### App icons and Supabase Storage
+
+App icons (`app-icon-192.png`, `app-icon-512.png`) are served from the public `images` bucket in Supabase Storage rather than from the Vercel deployment bundle. References in `src/routes/__root.tsx` (favicon, apple-touch-icon, og:image, twitter:image) and `public/manifest.json` (PWA install icons) all point to absolute Supabase Storage URLs.
+
+This means icon updates require only uploading a new file to Supabase Storage — no code change or redeployment needed. The CSP `img-src https:` directive already permits loading from the Supabase CDN domain.
 
 ### Application-level encryption
 

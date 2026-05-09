@@ -10,13 +10,13 @@
   "theme_color": "#16182a",
   "icons": [
     {
-      "src": "/app-icon-192.png",
+      "src": "https://lihwlthdjimofgqdpuph.supabase.co/storage/v1/object/public/images/app-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app-icon-512.png",
+      "src": "https://lihwlthdjimofgqdpuph.supabase.co/storage/v1/object/public/images/app-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
