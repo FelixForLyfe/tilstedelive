@@ -399,6 +399,7 @@ function SletDataSide() {
           <Link to="/sikkerhed" className="hover:text-foreground">Sikkerhed</Link>
         </div>
         <p className="mt-3">Tilstede © {new Date().getFullYear()} — bygget til danske institutioner.</p>
+        <p className="mt-2 text-[10px] opacity-50">Tilstede er udviklet og drevet af FPH · CVR: 43252771 · Violvej 11, 1 - 4900 Nakskov · support@tilstede.live</p>
       </footer>
     </div>
   );
