@@ -882,6 +882,151 @@ export const superadminGetCustomerSuccess = createServerFn({ method: "POST" })
     return result.sort((a, b) => a.healthScore - b.healthScore);
   });
 
+// ─── Security & GDPR ─────────────────────────────────────────────────────────
+
+export type GdprRequest = {
+  id: string;
+  requester_email: string;
+  org_id: string | null;
+  org_name: string | null;
+  request_type: string;
+  status: string;
+  notes: string | null;
+  received_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+};
+
+export type AuthSecuritySummary = {
+  failed24h: number;
+  failed7d: number;
+  uniqueIps7d: number;
+};
+
+const GDPR_REQUEST_TYPES = ["deletion", "export", "rectification"] as const;
+const GDPR_REQUEST_STATUSES = ["pending", "in_progress", "completed", "rejected"] as const;
+
+export const superadminGetSecurityData = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ accessToken: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    await verifySuperadmin(data.accessToken);
+
+    const [gdprRes, authRes] = await Promise.all([
+      (supabaseAdmin as any)
+        .from("gdpr_requests")
+        .select("id, requester_email, org_id, request_type, status, notes, received_at, resolved_at, resolved_by, created_at, organizations(name)")
+        .order("received_at", { ascending: false })
+        .then((r: any) => r)
+        .catch(() => ({ data: [] })),
+
+      (supabaseAdmin as any)
+        .rpc("superadmin_auth_security_summary")
+        .then((r: any) => r)
+        .catch(() => ({ data: null })),
+    ]);
+
+    const requests: GdprRequest[] = (gdprRes.data ?? []).map((r: any) => ({
+      id: r.id as string,
+      requester_email: r.requester_email as string,
+      org_id: (r.org_id ?? null) as string | null,
+      org_name: (r.organizations?.name ?? null) as string | null,
+      request_type: r.request_type as string,
+      status: r.status as string,
+      notes: (r.notes ?? null) as string | null,
+      received_at: r.received_at as string,
+      resolved_at: (r.resolved_at ?? null) as string | null,
+      resolved_by: (r.resolved_by ?? null) as string | null,
+      created_at: r.created_at as string,
+    }));
+
+    const raw = authRes.data as Record<string, unknown> | null;
+    const authSecurity: AuthSecuritySummary = {
+      failed24h: Number(raw?.failed_24h ?? 0),
+      failed7d: Number(raw?.failed_7d ?? 0),
+      uniqueIps7d: Number(raw?.unique_ips_7d ?? 0),
+    };
+
+    return { requests, authSecurity };
+  });
+
+export const superadminCreateGdprRequest = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        requesterEmail: z.string().email("Ugyldig e-mailadresse"),
+        orgId: z.string().uuid().optional(),
+        requestType: z.enum(GDPR_REQUEST_TYPES),
+        notes: z.string().trim().max(2000).optional(),
+        receivedAt: z.string().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const { error } = await (supabaseAdmin as any).from("gdpr_requests").insert({
+      requester_email: data.requesterEmail,
+      org_id: data.orgId ?? null,
+      request_type: data.requestType,
+      notes: data.notes ?? null,
+      received_at: data.receivedAt ?? new Date().toISOString(),
+    });
+
+    if (error && isMissingTable(error)) {
+      throw new Error("gdpr_requests-tabellen eksisterer ikke endnu. Kør migration 20260509270000.");
+    }
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_CREATE_GDPR_REQUEST", data.orgId ?? null, {
+      request_type: data.requestType,
+      email_domain: data.requesterEmail.split("@")[1] ?? "unknown",
+    });
+
+    return { success: true };
+  });
+
+export const superadminUpdateGdprRequest = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        requestId: z.string().uuid(),
+        status: z.enum(GDPR_REQUEST_STATUSES),
+        notes: z.string().trim().max(2000).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+
+    const isResolved = data.status === "completed" || data.status === "rejected";
+    const patch: Record<string, unknown> = {
+      status: data.status,
+      ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      ...(isResolved
+        ? { resolved_at: new Date().toISOString(), resolved_by: admin.id }
+        : {}),
+    };
+
+    const { error } = await (supabaseAdmin as any)
+      .from("gdpr_requests")
+      .update(patch)
+      .eq("id", data.requestId);
+
+    if (error) throw new Error(error.message);
+
+    await auditLog(admin.id, "SUPERADMIN_UPDATE_GDPR_REQUEST", null, {
+      request_id: data.requestId,
+      new_status: data.status,
+    });
+
+    return { success: true };
+  });
+
+// ─── Update custom plan ───────────────────────────────────────────────────────
+
 export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z

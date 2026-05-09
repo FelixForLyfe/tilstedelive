@@ -28,6 +28,10 @@ import {
   ChevronDown,
   ChevronUp,
   StickyNote,
+  ShieldAlert,
+  Lock,
+  FileCheck,
+  Clock,
 } from "lucide-react";
 import {
   BarChart,
@@ -61,11 +65,16 @@ import {
   superadminListOrgNotes,
   superadminSaveOrgNote,
   superadminGetCustomerSuccess,
+  superadminGetSecurityData,
+  superadminCreateGdprRequest,
+  superadminUpdateGdprRequest,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
   type OrgNote,
   type OrgHealthData,
+  type GdprRequest,
+  type AuthSecuritySummary,
 } from "@/server/superadmin.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
@@ -185,6 +194,8 @@ const EVENT_LABELS: Record<string, string> = {
   SUPERADMIN_CREATE_CUSTOM_PLAN: "Oprettede misc. plan",
   SUPERADMIN_UPDATE_CUSTOM_PLAN: "Opdaterede misc. plan",
   SUPERADMIN_SAVE_ORG_NOTE: "Gemte organisations-note",
+  SUPERADMIN_CREATE_GDPR_REQUEST: "Oprettede GDPR-anmodning",
+  SUPERADMIN_UPDATE_GDPR_REQUEST: "Opdaterede GDPR-anmodning",
 };
 
 const CUSTOM_PLAN_STATUS_LABELS: Record<string, string> = {
@@ -206,6 +217,7 @@ const TABS = [
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
   { id: "misc", label: "Misc. Planer", icon: Layers },
+  { id: "sikkerhed", label: "Sikkerhed", icon: ShieldAlert },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -328,6 +340,7 @@ function SuperadminPanel() {
         {activeTab === "users" && <UsersTab accessToken={accessToken} />}
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
+        {activeTab === "sikkerhed" && <SecurityTab accessToken={accessToken} />}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -2391,6 +2404,494 @@ function CustomPlanModal({
             className="flex-1 rounded-xl bg-gradient-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
           >
             {saving ? "Gemmer…" : isEdit ? "Gem ændringer" : "Opret plan"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Security tab ────────────────────────────────────────────────────────────
+
+const GDPR_TYPE_LABELS: Record<string, string> = {
+  deletion: "Sletning (art. 17)",
+  export: "Indsigt/eksport (art. 15)",
+  rectification: "Berigtigelse (art. 16)",
+};
+
+const GDPR_STATUS_LABELS: Record<string, string> = {
+  pending: "Afventer",
+  in_progress: "I gang",
+  completed: "Afsluttet",
+  rejected: "Afvist",
+};
+
+const GDPR_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-warning/15 text-warning",
+  in_progress: "bg-primary/15 text-primary",
+  completed: "bg-success/15 text-success",
+  rejected: "bg-muted text-muted-foreground",
+};
+
+function SecurityTab({ accessToken }: { accessToken: string }) {
+  const [requests, setRequests] = useState<GdprRequest[]>([]);
+  const [authSecurity, setAuthSecurity] = useState<AuthSecuritySummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editTarget, setEditTarget] = useState<GdprRequest | null>(null);
+  const [soeg, setSoeg] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await superadminGetSecurityData({ data: { accessToken } });
+      setRequests((result as any).requests as GdprRequest[]);
+      setAuthSecurity((result as any).authSecurity as AuthSecuritySummary);
+    } catch {
+      toast.error("Kunne ikke indlæse sikkerhedsdata");
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtrede = soeg
+    ? requests.filter(
+        (r) =>
+          r.requester_email.toLowerCase().includes(soeg.toLowerCase()) ||
+          (r.org_name ?? "").toLowerCase().includes(soeg.toLowerCase()),
+      )
+    : requests;
+
+  const pending = requests.filter((r) => r.status === "pending").length;
+  const inProgress = requests.filter((r) => r.status === "in_progress").length;
+
+  const securityLevel: "green" | "yellow" | "red" = !authSecurity
+    ? "green"
+    : authSecurity.failed24h >= 50
+    ? "red"
+    : authSecurity.failed24h >= 10
+    ? "yellow"
+    : "green";
+
+  const secLevelCfg = {
+    green: { cls: "border-success/30 bg-success/5 text-success", label: "Normal" },
+    yellow: { cls: "border-warning/30 bg-warning/5 text-warning", label: "Forhøjet aktivitet" },
+    red: { cls: "border-destructive/30 bg-destructive/5 text-destructive", label: "Høj aktivitet" },
+  }[securityLevel];
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
+        <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Indlæser sikkerhedsdata…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Sikkerhed & Compliance</h2>
+          <p className="text-sm text-muted-foreground">
+            {pending > 0
+              ? <span className="font-semibold text-warning">{pending} afventende GDPR-anmodning{pending > 1 ? "er" : ""}</span>
+              : "Alle GDPR-anmodninger behandlet"}
+            {inProgress > 0 && <> · {inProgress} i gang</>}
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated"
+        >
+          <RefreshCw className="h-4 w-4" /> Opdater
+        </button>
+      </div>
+
+      {/* ── Auth security card ── */}
+      <section>
+        <h3 className="mb-3 font-display text-base font-semibold">Auth-sikkerhed</h3>
+        <div className={`rounded-2xl border p-5 ${secLevelCfg.cls}`}>
+          <div className="mb-3 flex items-center gap-2">
+            <Lock className="h-4 w-4 shrink-0" />
+            <span className="font-semibold">Niveau: {secLevelCfg.label}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-xl bg-background/60 p-3 text-center">
+              <p className="font-display text-2xl font-bold">
+                {authSecurity?.failed24h ?? 0}
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">Fejlslagne logins (24t)</p>
+            </div>
+            <div className="rounded-xl bg-background/60 p-3 text-center">
+              <p className="font-display text-2xl font-bold">
+                {authSecurity?.failed7d ?? 0}
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">Fejlslagne logins (7d)</p>
+            </div>
+            <div className="rounded-xl bg-background/60 p-3 text-center">
+              <p className="font-display text-2xl font-bold">
+                {authSecurity?.uniqueIps7d ?? 0}
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">Unikke IP-adresser (7d)</p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs opacity-60">
+            Aggregerede tal fra Supabase Auth audit-log — ingen individuelle e-mails eller tokens vises
+          </p>
+        </div>
+      </section>
+
+      {/* ── GDPR requests ── */}
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-base font-semibold">GDPR-anmodninger</h3>
+            <p className="text-sm text-muted-foreground">
+              {requests.length} totalt · svar-frist: 30 dage fra modtagelse (GDPR art. 12)
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
+            <Plus className="h-4 w-4" /> Ny anmodning
+          </button>
+        </div>
+
+        {pending > 0 && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>{pending}</strong> anmodning{pending > 1 ? "er afventer" : " afventer"} behandling
+            </span>
+          </div>
+        )}
+
+        <div className="relative mb-4 max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={soeg}
+            onChange={(e) => setSoeg(e.target.value)}
+            placeholder="Søg e-mail eller organisation…"
+            className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none"
+          />
+        </div>
+
+        <div className="glass overflow-hidden rounded-2xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-left">E-mail</th>
+                  <th className="px-4 py-3 text-left">Organisation</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Modtaget</th>
+                  <th className="px-4 py-3 text-left">Frist</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtrede.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                      <FileCheck className="mx-auto mb-3 h-8 w-8 opacity-30" />
+                      {soeg ? "Ingen anmodninger matcher søgningen" : "Ingen GDPR-anmodninger registreret"}
+                    </td>
+                  </tr>
+                ) : (
+                  filtrede.map((req, i) => {
+                    const deadline = new Date(req.received_at);
+                    deadline.setDate(deadline.getDate() + 30);
+                    const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86_400_000);
+                    const isOverdue = daysLeft < 0 && req.status !== "completed" && req.status !== "rejected";
+                    const isDueSoon = daysLeft >= 0 && daysLeft <= 5 && req.status === "pending";
+                    return (
+                      <tr
+                        key={req.id}
+                        className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""}`}
+                      >
+                        <td className="px-4 py-3 font-mono text-xs">{req.requester_email}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {req.org_name ?? <span className="italic">–</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {GDPR_TYPE_LABELS[req.request_type] ?? req.request_type}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${GDPR_STATUS_COLORS[req.status] ?? "bg-muted text-muted-foreground"}`}>
+                            {GDPR_STATUS_LABELS[req.status] ?? req.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {fmtDato(req.received_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {req.status === "completed" || req.status === "rejected" ? (
+                            <span className="text-xs text-muted-foreground">
+                              {req.resolved_at ? fmtDato(req.resolved_at) : "–"}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${isOverdue ? "text-destructive" : isDueSoon ? "text-warning" : "text-muted-foreground"}`}>
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {isOverdue
+                                ? `${Math.abs(daysLeft)}d overskredet`
+                                : `${daysLeft}d tilbage`}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setEditTarget(req)}
+                            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated"
+                          >
+                            {req.status === "pending" || req.status === "in_progress" ? "Behandl" : "Vis"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-border/40 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
+          <ShieldAlert className="mb-0.5 mr-1.5 inline h-3.5 w-3.5" />
+          <strong>Lovkrav:</strong> GDPR art. 12 kræver svar inden 30 dage. Art. 17-anmodninger (sletning) skal som udgangspunkt imødekommes med mindre en undtagelse i art. 17 stk. 3 finder anvendelse.
+        </div>
+      </section>
+
+      {showCreate && (
+        <GdprRequestModal
+          accessToken={accessToken}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { setShowCreate(false); load(); }}
+        />
+      )}
+
+      {editTarget && (
+        <GdprRequestModal
+          accessToken={accessToken}
+          request={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { setEditTarget(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── GDPR request modal ───────────────────────────────────────────────────────
+
+function GdprRequestModal({
+  accessToken,
+  request,
+  onClose,
+  onSaved,
+}: {
+  accessToken: string;
+  request?: GdprRequest;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!request;
+
+  const [orgNames, setOrgNames] = useState<{ id: string; name: string }[]>([]);
+  const [email, setEmail] = useState(request?.requester_email ?? "");
+  const [orgId, setOrgId] = useState(request?.org_id ?? "");
+  const [requestType, setRequestType] = useState(request?.request_type ?? "deletion");
+  const [status, setStatus] = useState(request?.status ?? "pending");
+  const [notes, setNotes] = useState(request?.notes ?? "");
+  const [receivedAt, setReceivedAt] = useState(
+    request?.received_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    superadminListOrgNames({ data: { accessToken } })
+      .then((d) => setOrgNames(d as { id: string; name: string }[]))
+      .catch(() => {});
+  }, [accessToken]);
+
+  const canSave = isEdit ? true : email.includes("@");
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      if (isEdit && request) {
+        await superadminUpdateGdprRequest({
+          data: {
+            accessToken,
+            requestId: request.id,
+            status: status as any,
+            notes: notes.trim() || undefined,
+          },
+        });
+        toast.success("Anmodning opdateret");
+      } else {
+        await superadminCreateGdprRequest({
+          data: {
+            accessToken,
+            requesterEmail: email.trim(),
+            orgId: orgId || undefined,
+            requestType: requestType as any,
+            notes: notes.trim() || undefined,
+            receivedAt: new Date(receivedAt).toISOString(),
+          },
+        });
+        toast.success("Anmodning registreret");
+      }
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme anmodning");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="glass w-full max-w-lg space-y-4 rounded-t-3xl p-5 sm:rounded-3xl"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {isEdit ? "Behandl" : "Registrér"} GDPR-anmodning
+            </p>
+            <h3 className="font-display text-lg font-bold">
+              {isEdit ? request!.requester_email : "Ny anmodning"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {!isEdit && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  E-mail (den registrerede) <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="bruger@eksempel.dk"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Organisation (valgfri)
+                </label>
+                <select
+                  value={orgId}
+                  onChange={(e) => setOrgId(e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="">– Ingen / ukendt –</option>
+                  {orgNames.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Anmodningstype <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={requestType}
+                  onChange={(e) => setRequestType(e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                >
+                  {Object.entries(GDPR_TYPE_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Modtagelsesdato
+                </label>
+                <input
+                  type="date"
+                  value={receivedAt}
+                  onChange={(e) => setReceivedAt(e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                />
+              </div>
+            </>
+          )}
+
+          {isEdit && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+              >
+                {Object.entries(GDPR_STATUS_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Interne noter (valgfri)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Fx: Bekræftet identitet via e-mail d. 9/5 · Data slettet fra auth + org · Kvittering sendt"
+              className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Skriv kun organisatorisk/proceduremæssig info — ingen følsomme personoplysninger.
+            </p>
+          </div>
+
+          {isEdit && (request?.request_type === "deletion") && (
+            <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
+              <strong>Sletning (art. 17):</strong> Husk at slette brugeren i Brugere-fanen og bekræfte sletning af eventuelle børneregistreringer til organisationens admin.
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-border bg-surface py-2 text-sm font-medium hover:bg-surface-elevated"
+          >
+            Annullér
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !canSave}
+            className="flex-1 rounded-xl bg-gradient-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? "Gemmer…" : isEdit ? "Gem status" : "Registrér anmodning"}
           </button>
         </div>
       </div>
