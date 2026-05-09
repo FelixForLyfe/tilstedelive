@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
+import { getTerms, type OrgType, type Terms } from "@/lib/terminology";
 
 export type Medlemskab = {
   organization_id: string;
   role: "admin" | "employee";
   status: "active" | "pending";
-  organizations: { id: string; name: string } | null;
+  organizations: { id: string; name: string; org_type: OrgType | null } | null;
 };
 
 type OrgCtx = {
@@ -14,13 +15,18 @@ type OrgCtx = {
   aktivOrgId: string | null;
   aktivOrg: Medlemskab | null;
   erAdmin: boolean;
+  orgType: OrgType | null;
+  terms: Terms;
   vaelgOrg: (id: string) => void;
   genindlaes: () => Promise<void>;
   loading: boolean;
 };
 
+const defaultTerms = getTerms(null);
+
 const Ctx = createContext<OrgCtx>({
   medlemskaber: [], aktivOrgId: null, aktivOrg: null, erAdmin: false,
+  orgType: null, terms: defaultTerms,
   vaelgOrg: () => {}, genindlaes: async () => {}, loading: true,
 });
 
@@ -40,7 +46,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const { data, error } = await supabase
       .from("organization_members")
-      .select("organization_id, role, status, organizations(id, name)")
+      .select("organization_id, role, status, organizations(id, name, org_type)")
       .eq("user_id", user.id)
       .eq("status", "active");
     if (error) { console.error(error); setLoading(false); return; }
@@ -64,9 +70,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const aktivOrg = medlemskaber.find((m) => m.organization_id === aktivOrgId) ?? null;
   const erAdmin = aktivOrg?.role === "admin";
+  const orgType = (aktivOrg?.organizations?.org_type ?? null) as OrgType | null;
+  const terms = getTerms(orgType);
 
   return (
-    <Ctx.Provider value={{ medlemskaber, aktivOrgId, aktivOrg, erAdmin, vaelgOrg, genindlaes: indlaes, loading }}>
+    <Ctx.Provider value={{ medlemskaber, aktivOrgId, aktivOrg, erAdmin, orgType, terms, vaelgOrg, genindlaes: indlaes, loading }}>
       {children}
     </Ctx.Provider>
   );

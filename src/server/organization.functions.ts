@@ -3,9 +3,12 @@ import { getRequestIP } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+const ORG_TYPES = ["skole_sfo", "sportsklub", "fitnesscenter", "spejder", "daginstitution", "andet"] as const;
+
 const createOrganizationSchema = z.object({
   fullName: z.string().trim().min(1, "Navn er påkrævet").max(120),
   orgName: z.string().trim().min(1, "Organisationens navn er påkrævet").max(120),
+  orgType: z.enum(ORG_TYPES).default("skole_sfo"),
   email: z.string().trim().toLowerCase().email("Ugyldig e-mail").max(254),
   password: z.string().min(8, "Adgangskoden skal være mindst 8 tegn").max(128),
 });
@@ -80,7 +83,7 @@ export const createOrganizationAdmin = createServerFn({ method: "POST" })
 
       const { data: org, error: orgError } = await supabaseAdmin
         .from("organizations")
-        .insert({ name: data.orgName, created_by: userId })
+        .insert({ name: data.orgName, org_type: data.orgType, created_by: userId })
         .select("id, name")
         .single();
 
