@@ -251,7 +251,11 @@ function SikkerhedSide() {
       </section>
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
-        Tilstede © {new Date().getFullYear()} – bygget til danske institutioner.
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link to="/" className="hover:text-foreground">Forside</Link>
+          <Link to="/privatlivspolitik" className="hover:text-foreground">Privatlivspolitik</Link>
+        </div>
+        <p className="mt-3">Tilstede © {new Date().getFullYear()} — bygget til danske institutioner.</p>
       </footer>
     </div>
   );

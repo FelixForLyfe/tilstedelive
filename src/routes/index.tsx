@@ -72,9 +72,11 @@ function Forside() {
       </section>
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
-        <Link to="/sikkerhed" className="underline-offset-4 hover:underline">Sikkerhed</Link>
-        <span className="mx-2">·</span>
-        Tilstede © {new Date().getFullYear()} – bygget til danske institutioner.
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link to="/sikkerhed" className="hover:text-foreground">Sikkerhed</Link>
+          <Link to="/privatlivspolitik" className="hover:text-foreground">Privatlivspolitik</Link>
+        </div>
+        <p className="mt-3">Tilstede © {new Date().getFullYear()} — bygget til danske institutioner.</p>
       </footer>
     </div>
   );
