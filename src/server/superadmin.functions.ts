@@ -6,20 +6,29 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 const FORBIDDEN = "Ingen adgang.";
 
 async function verifySuperadmin(accessToken: string) {
-  // Verify token with a user-scoped client (works with new sb_secret key format)
-  const { createClient } = await import("@supabase/supabase-js");
-  const supabaseUser = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_PUBLISHABLE_KEY!,
-    { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { persistSession: false, autoRefreshToken: false } },
-  );
-  const { data: { user }, error } = await supabaseUser.auth.getUser();
+  // Decode JWT payload to extract sub (user ID) and expiry without a network call
+  const parts = accessToken.split(".");
+  if (parts.length !== 3) throw new Error(FORBIDDEN);
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+  } catch {
+    throw new Error(FORBIDDEN);
+  }
+  const userId = payload.sub as string | undefined;
+  if (!userId) throw new Error(FORBIDDEN);
+  if (typeof payload.exp === "number" && payload.exp < Math.floor(Date.now() / 1000)) {
+    throw new Error(FORBIDDEN);
+  }
+
+  // Verify user actually exists in Supabase Auth (requires valid service role key)
+  const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(userId);
   if (error || !user) throw new Error(FORBIDDEN);
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("role")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   if ((profile as any)?.role !== "superadmin") throw new Error(FORBIDDEN);
