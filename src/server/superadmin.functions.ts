@@ -5,34 +5,31 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const FORBIDDEN = "Ingen adgang.";
 
-async function verifySuperadmin(accessToken: string) {
-  // Decode JWT payload to extract sub (user ID) and expiry without a network call
+async function verifySuperadmin(accessToken: string): Promise<{ id: string }> {
+  // Decode JWT (Supabase signs it — sub is the user UUID)
   const parts = accessToken.split(".");
   if (parts.length !== 3) throw new Error(FORBIDDEN);
-  let payload: Record<string, unknown>;
+  let userId: string;
   try {
-    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+    const raw = Buffer.from(parts[1], "base64").toString("utf-8");
+    const payload = JSON.parse(raw);
+    if (!payload?.sub) throw new Error("no sub");
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp === "number" && payload.exp < now) throw new Error("expired");
+    userId = payload.sub as string;
   } catch {
     throw new Error(FORBIDDEN);
   }
-  const userId = payload.sub as string | undefined;
-  if (!userId) throw new Error(FORBIDDEN);
-  if (typeof payload.exp === "number" && payload.exp < Math.floor(Date.now() / 1000)) {
-    throw new Error(FORBIDDEN);
-  }
 
-  // Verify user actually exists in Supabase Auth (requires valid service role key)
-  const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(userId);
-  if (error || !user) throw new Error(FORBIDDEN);
-
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error } = await supabaseAdmin
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .single();
 
+  if (error) throw new Error(`DB: ${error.message}`);
   if ((profile as any)?.role !== "superadmin") throw new Error(FORBIDDEN);
-  return user;
+  return { id: userId };
 }
 
 // Silent audit — never throws, so a missing column won't break a panel action.
