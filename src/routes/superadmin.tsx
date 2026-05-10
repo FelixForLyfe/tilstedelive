@@ -243,8 +243,8 @@ function SuperadminPanel() {
     try {
       const data = await superadminListOrgs({ data: { accessToken } });
       setOrgs(data as Org[]);
-    } catch {
-      toast.error("Kunne ikke indlæse organisationer");
+    } catch (err: any) {
+      toast.error(`Organisationer: ${err?.message ?? "Ukendt fejl"}`);
     } finally {
       setOrgsLoading(false);
     }
@@ -369,8 +369,8 @@ function DashboardTab({ accessToken }: { accessToken: string }) {
     try {
       const result = await superadminGetDashboard({ data: { accessToken } });
       setDashData(result as DashboardData);
-    } catch {
-      toast.error("Kunne ikke indlæse dashboard");
+    } catch (err: any) {
+      toast.error(`Dashboard: ${err?.message ?? "Ukendt fejl"}`);
     } finally {
       setLoading(false);
     }
@@ -1040,7 +1040,7 @@ function UsersTab({ accessToken }: { accessToken: string }) {
     try {
       const data = await superadminListUsers({ data: { accessToken } });
       setUsers(data as UserRow[]);
-    } catch { toast.error("Kunne ikke indlæse brugere"); }
+    } catch (err: any) { toast.error(`Brugere: ${err?.message ?? "Ukendt fejl"}`); }
     finally { setLoading(false); }
   }, [accessToken]);
 
@@ -1190,7 +1190,7 @@ function KeysTab({ accessToken }: { accessToken: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try { const data = await superadminListPlanKeys({ data: { accessToken } }); setKeys(data as PlanKey[]); }
-    catch { toast.error("Kunne ikke indlæse plan-nøgler"); }
+    catch (err: any) { toast.error(`Plan-nøgler: ${err?.message ?? "Ukendt fejl"}`); }
     finally { setLoading(false); }
   }, [accessToken]);
 
@@ -1303,8 +1303,8 @@ function MiscPlansTab({ accessToken }: { accessToken: string }) {
     try {
       const data = await superadminListCustomPlans({ data: { accessToken } });
       setPlans(data as CustomPlan[]);
-    } catch {
-      toast.error("Kunne ikke indlæse misc. planer");
+    } catch (err: any) {
+      toast.error(`Misc. planer: ${err?.message ?? "Ukendt fejl"}`);
     } finally {
       setLoading(false);
     }
@@ -1670,7 +1670,7 @@ function LogTab({ accessToken }: { accessToken: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try { const data = await superadminListAuditLog({ data: { accessToken } }); setEntries(data as AuditEntry[]); }
-    catch { toast.error("Kunne ikke indlæse handlingslog"); }
+    catch (err: any) { toast.error(`Handlingslog: ${err?.message ?? "Ukendt fejl"}`); }
     finally { setLoading(false); }
   }, [accessToken]);
 
