@@ -10,15 +10,17 @@ async function verifySuperadmin(accessToken: string) {
     data: { user },
     error,
   } = await supabaseAdmin.auth.getUser(accessToken);
-  if (error || !user) throw new Error(FORBIDDEN);
+  if (error || !user) throw new Error(`auth.getUser fejlede: ${error?.message ?? "ingen bruger"}`);
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  if ((profile as any)?.role !== "superadmin") throw new Error(FORBIDDEN);
+  if (profileError) throw new Error(`profiles query fejlede: ${profileError.message}`);
+  const role = (profile as any)?.role;
+  if (role !== "superadmin") throw new Error(`Ingen adgang (role=${role ?? "null"})`);
   return user;
 }
 
