@@ -6,21 +6,23 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 const FORBIDDEN = "Ingen adgang.";
 
 async function verifySuperadmin(accessToken: string) {
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(accessToken);
-  if (error || !user) throw new Error(`auth.getUser fejlede: ${error?.message ?? "ingen bruger"}`);
+  // Verify token with a user-scoped client (works with new sb_secret key format)
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabaseUser = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_PUBLISHABLE_KEY!,
+    { global: { headers: { Authorization: `Bearer ${accessToken}` } }, auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { data: { user }, error } = await supabaseUser.auth.getUser();
+  if (error || !user) throw new Error(FORBIDDEN);
 
-  const { data: profile, error: profileError } = await supabaseAdmin
+  const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  if (profileError) throw new Error(`profiles query fejlede: ${profileError.message}`);
-  const role = (profile as any)?.role;
-  if (role !== "superadmin") throw new Error(`Ingen adgang (role=${role ?? "null"})`);
+  if ((profile as any)?.role !== "superadmin") throw new Error(FORBIDDEN);
   return user;
 }
 
