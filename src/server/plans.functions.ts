@@ -43,7 +43,7 @@ export const redeemPlanKey = createServerFn({ method: "POST" })
 
     const { data: key, error: keyError } = await (supabaseAdmin as any)
       .from("plan_keys")
-      .select("id, plan_type, used, label, is_promo, max_uses, uses_count, expires_at")
+      .select("id, plan_type, used, label, is_promo, max_uses, uses_count, expires_at, price_dkk, discount_pct, duration_months")
       .eq("code", normalizedCode)
       .single();
 
@@ -97,5 +97,43 @@ export const redeemPlanKey = createServerFn({ method: "POST" })
       .eq("id", data.orgId);
     if (orgError) throw new Error(orgError.message);
 
-    return { planType: key.plan_type as string, label: (key.label ?? null) as string | null };
+    // If the key has a price/discount or duration, create a custom_plans entry for tracking
+    const basePrices: Record<string, number> = { basis: 299, pro: 599, organisation: 1199, kommune: 4999, special: 0 };
+    const priceDkk = (key.price_dkk as number | null);
+    const discountPct = (key.discount_pct as number | null);
+    const durationMonths = (key.duration_months as number | null);
+    const hasCustomPricing = priceDkk !== null || discountPct !== null;
+
+    if (hasCustomPricing || durationMonths !== null) {
+      const basePrice = basePrices[key.plan_type as string] ?? 0;
+      const effectivePrice = priceDkk !== null
+        ? priceDkk
+        : discountPct !== null
+          ? Math.round(basePrice * (1 - discountPct / 100))
+          : basePrice;
+
+      const startDate = new Date();
+      let endDate: string | null = null;
+      if (durationMonths !== null) {
+        const d = new Date(startDate);
+        d.setMonth(d.getMonth() + durationMonths);
+        endDate = d.toISOString().slice(0, 10);
+      }
+
+      await (supabaseAdmin as any).from("custom_plans").insert({
+        organization_id: data.orgId,
+        name: (key.label as string | null) ?? `${key.plan_type} aktiveringsnøgle`,
+        price_dkk: effectivePrice,
+        description: `Indløst via kode ${normalizedCode}${discountPct !== null ? ` (${discountPct}% rabat)` : ""}`,
+        start_date: startDate.toISOString().slice(0, 10),
+        end_date: endDate,
+        status: "active",
+      });
+    }
+
+    return {
+      planType: key.plan_type as string,
+      label: (key.label ?? null) as string | null,
+      durationMonths: durationMonths,
+    };
   });
