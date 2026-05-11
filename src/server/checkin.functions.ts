@@ -3,18 +3,10 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from "crypto";
 
-function decodeJwtUserId(accessToken: string): string {
-  const parts = accessToken.split(".");
-  if (parts.length !== 3) throw new Error("Ugyldig session.");
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
-    if (!payload?.sub) throw new Error();
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload.exp === "number" && payload.exp < now) throw new Error("Session udløbet.");
-    return payload.sub as string;
-  } catch (e: any) {
-    throw new Error(e?.message ?? "Ugyldig session.");
-  }
+async function verifyToken(accessToken: string): Promise<string> {
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+  if (error || !user) throw new Error("Ugyldig eller udløbet session.");
+  return user.id;
 }
 
 function hashPin(pin: string): string {
@@ -48,7 +40,7 @@ export const generateQrLocation = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: membership } = await supabaseAdmin
       .from("organization_members")
@@ -93,7 +85,7 @@ export const deleteQrLocation = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: location } = await (supabaseAdmin as any)
       .from("location_qr_codes")
@@ -133,7 +125,7 @@ export const setLocationPin = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: location } = await (supabaseAdmin as any)
       .from("location_qr_codes")
@@ -173,7 +165,7 @@ export const qrCheckin = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: location } = await (supabaseAdmin as any)
       .from("location_qr_codes")
@@ -233,7 +225,7 @@ export const pinCheckin = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: location } = await (supabaseAdmin as any)
       .from("location_qr_codes")
@@ -334,7 +326,7 @@ export const getOrgCheckins = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: membership } = await supabaseAdmin
       .from("organization_members")
@@ -375,7 +367,7 @@ export const exportCheckinsCSV = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const userId = decodeJwtUserId(data.accessToken);
+    const userId = await verifyToken(data.accessToken);
 
     const { data: membership } = await supabaseAdmin
       .from("organization_members")

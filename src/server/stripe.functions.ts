@@ -111,6 +111,15 @@ export const createBillingPortalSession = createServerFn({ method: "POST" })
     } = await supabaseAdmin.auth.getUser(data.accessToken);
     if (authErr || !user) throw new Error("Ugyldig session.");
 
+    const { data: membership } = await supabaseAdmin
+      .from("organization_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("organization_id", data.orgId)
+      .eq("status", "active")
+      .single();
+    if (membership?.role !== "admin") throw new Error("Kun administratorer kan tilgå faktureringsportalen.");
+
     const { data: org } = await supabaseAdmin
       .from("organizations")
       .select("stripe_customer_id")
