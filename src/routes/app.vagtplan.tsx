@@ -29,7 +29,10 @@ function addDays(date: Date, n: number): Date {
 }
 
 function toISODate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function formatWeekLabel(monday: Date): string {
@@ -856,7 +859,9 @@ function VagtplanSide() {
         <StaffWeekSummary orgId={aktivOrgId!} weekDates={weekDates} />
       )}
 
-      {/* Shift modal */}
+      </>}
+
+      {/* Shift modal — outside all tab fragments so it works from any tab */}
       {modalShift !== undefined && aktivOrgId && (
         <ShiftModal
           orgId={aktivOrgId}
@@ -869,7 +874,6 @@ function VagtplanSide() {
           onSaved={loadShifts}
         />
       )}
-      </>}
     </div>
   );
 }
