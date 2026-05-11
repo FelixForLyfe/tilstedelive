@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Calendar, Download, ChevronRight, Users, Activity as ActIcon, Clock, Trash2, FileText } from "lucide-react";
+import { Archive, Calendar, Download, ChevronRight, Users, Activity as ActIcon, Clock, Trash2, FileText, CalendarDays, LogIn } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
@@ -107,7 +107,7 @@ function ArkivSide() {
     URL.revokeObjectURL(url);
   };
 
-  const eksporterPDF = (log: DagligLog) => {
+  const eksporterPDF = async (log: DagligLog) => {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const orgNavn = aktivOrg?.organizations?.name ?? "Organisation";
     const margin = 40;
@@ -124,6 +124,25 @@ function ArkivSide() {
       y += wrapped.length * (size * 1.2);
     };
     const skil = (h = 8) => { y += h; };
+
+    // Fetch extra data
+    const from = new Date(log.date + "T00:00:00").toISOString();
+    const to = new Date(log.date + "T23:59:59").toISOString();
+    const [{ data: checkins }, { data: vagtShifts }] = await Promise.all([
+      (supabase as any)
+        .from("staff_checkins")
+        .select("checked_in_at,checked_out_at,profiles(full_name),location:location_qr_codes(location_name)")
+        .eq("organization_id", aktivOrgId)
+        .gte("checked_in_at", from)
+        .lte("checked_in_at", to)
+        .order("checked_in_at"),
+      (supabase as any)
+        .from("shifts")
+        .select("start_time,end_time,role,status,shift_assignments(user_id,profiles(full_name))")
+        .eq("organization_id", aktivOrgId)
+        .eq("date", log.date)
+        .order("start_time"),
+    ]);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
@@ -168,6 +187,30 @@ function ArkivSide() {
     for (const v of vagter) {
       const min = beregnMinutter(v);
       linje(`• ${v.name ?? v.email ?? "Medarbejder"} — ${Math.floor(min / 60)}t ${min % 60}m${v.total_break_minutes ? ` (pause ${v.total_break_minutes}m)` : ""}`, 10);
+    }
+    skil(12);
+
+    const checkinList = (checkins ?? []) as any[];
+    linje(`Tjek ind (${checkinList.length})`, 13, true);
+    skil(4);
+    if (checkinList.length === 0) linje("— ingen check-ins", 10);
+    for (const c of checkinList) {
+      const name = c.profiles?.full_name ?? "Ukendt";
+      const loc = c.location?.location_name ? ` @ ${c.location.location_name}` : "";
+      const inTime = `ind ${tid(c.checked_in_at)}`;
+      const outTime = c.checked_out_at ? ` · ud ${tid(c.checked_out_at)}` : " · ikke ud";
+      linje(`• ${name}${loc} — ${inTime}${outTime}`, 10);
+    }
+    skil(12);
+
+    const shiftList = (vagtShifts ?? []) as any[];
+    linje(`Vagtplan (${shiftList.length} vagter)`, 13, true);
+    skil(4);
+    if (shiftList.length === 0) linje("— ingen vagter planlagt", 10);
+    for (const s of shiftList) {
+      const names = (s.shift_assignments ?? []).map((a: any) => a.profiles?.full_name ?? "?").join(", ");
+      const statusStr = s.status === "cancelled" ? " [Aflyst]" : "";
+      linje(`• ${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}${s.role ? ` (${s.role})` : ""}${statusStr}${names ? ` — ${names}` : ""}`, 10);
     }
 
     doc.save(`daglig-log-${log.date}.pdf`);
@@ -247,11 +290,37 @@ function ArkivSide() {
 }
 
 function DagDetalje({ log, onLuk, onPDF, onSlet }: { log: DagligLog; onLuk: () => void; onPDF: () => void; onSlet: () => void }) {
-  const { terms } = useOrg();
+  const { aktivOrgId, terms } = useOrg();
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const fremmoede = (log.attendance_snapshot ?? []) as any[];
   const aktiviteter = (log.activities_snapshot ?? []) as any[];
   const vagter = (log.employee_time_snapshot ?? []) as any[];
+  const [checkins, setCheckins] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!aktivOrgId) return;
+    // Load staff check-ins for this date
+    const from = new Date(log.date + "T00:00:00").toISOString();
+    const to = new Date(log.date + "T23:59:59").toISOString();
+    (supabase as any)
+      .from("staff_checkins")
+      .select("id,checked_in_at,checked_out_at,checkin_type,profiles(full_name),location:location_qr_codes(location_name)")
+      .eq("organization_id", aktivOrgId)
+      .gte("checked_in_at", from)
+      .lte("checked_in_at", to)
+      .order("checked_in_at")
+      .then(({ data }: any) => setCheckins(data ?? []));
+
+    // Load vagtplan shifts for this date
+    (supabase as any)
+      .from("shifts")
+      .select("id,start_time,end_time,role,color,status,shift_assignments(user_id,status,profiles(full_name))")
+      .eq("organization_id", aktivOrgId)
+      .eq("date", log.date)
+      .order("start_time")
+      .then(({ data }: any) => setShifts(data ?? []));
+  }, [aktivOrgId, log.date]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-background/80 p-3 backdrop-blur-sm sm:items-center" onClick={onLuk}>
@@ -327,6 +396,63 @@ function DagDetalje({ log, onLuk, onPDF, onSlet }: { log: DagligLog; onLuk: () =
                       {Math.floor(min / 60)}t {min % 60}m
                       {v.total_break_minutes ? ` · pause ${v.total_break_minutes}m` : ""}
                     </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Sektion>
+
+        <Sektion icon={LogIn} titel={`Tjek ind (${checkins.length})`}>
+          {checkins.length === 0 ? (
+            <Tom>Ingen check-ins registreret</Tom>
+          ) : (
+            <div className="grid gap-1.5">
+              {checkins.map((c, i) => (
+                <div key={i} className="flex items-center justify-between rounded-lg bg-surface/60 px-3 py-2 text-sm">
+                  <div>
+                    <span>{c.profiles?.full_name ?? "Ukendt"}</span>
+                    {c.location?.location_name && (
+                      <span className="ml-2 text-xs text-muted-foreground">@ {c.location.location_name}</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    ind {tid(c.checked_in_at)}
+                    {c.checked_out_at ? ` · ud ${tid(c.checked_out_at)}` : " · ikke ud"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Sektion>
+
+        <Sektion icon={CalendarDays} titel={`Vagtplan (${shifts.length} vagter)`}>
+          {shifts.length === 0 ? (
+            <Tom>Ingen vagter planlagt</Tom>
+          ) : (
+            <div className="grid gap-1.5">
+              {shifts.map((s, i) => {
+                const assigned = (s.shift_assignments ?? []).filter((a: any) => a.status !== "declined");
+                return (
+                  <div key={i} className="rounded-lg bg-surface/60 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: s.color ?? "#6366f1" }}
+                        />
+                        <span>{s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</span>
+                        {s.role && <span className="text-muted-foreground">· {s.role}</span>}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {s.status === "cancelled" ? "Aflyst" : `${assigned.length} tildelt`}
+                      </span>
+                    </div>
+                    {assigned.length > 0 && (
+                      <p className="mt-0.5 text-xs text-muted-foreground pl-4">
+                        {assigned.map((a: any) => a.profiles?.full_name ?? "?").join(", ")}
+                      </p>
+                    )}
                   </div>
                 );
               })}

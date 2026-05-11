@@ -25,6 +25,7 @@ function QrCheckinPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [dayClosed, setDayClosed] = useState(false);
 
   const loadStatus = useCallback(async () => {
     setPageState("loading");
@@ -38,8 +39,25 @@ function QrCheckinPage() {
       setUserName(session.user.email.split("@")[0]);
     }
 
+    const todayStr = new Date().toISOString().slice(0, 10);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Resolve org from QR code and check day status
+    const { data: loc } = await (supabase as any)
+      .from("location_qr_codes")
+      .select("organization_id")
+      .eq("code", code)
+      .maybeSingle();
+    if (loc?.organization_id) {
+      const { data: ds } = await supabase
+        .from("day_status")
+        .select("is_closed")
+        .eq("organization_id", loc.organization_id)
+        .eq("date", todayStr)
+        .maybeSingle();
+      setDayClosed(!!ds?.is_closed);
+    }
 
     const { data } = await (supabase as any)
       .from("staff_checkins")
@@ -55,7 +73,7 @@ function QrCheckinPage() {
         : null,
     );
     setPageState("idle");
-  }, []);
+  }, [code]);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
@@ -181,20 +199,27 @@ function QrCheckinPage() {
             <p className="mt-4 text-sm text-muted-foreground">
               Du er ikke tjekket ind i dag.
             </p>
-            <button
-              onClick={handleAction}
-              disabled={pageState === "submitting"}
-              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-4 text-lg font-semibold text-primary-foreground shadow-glow transition disabled:opacity-50"
-            >
-              {pageState === "submitting" ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <LogIn className="h-5 w-5" />
-                  Tjek ind
-                </>
-              )}
-            </button>
+            {dayClosed ? (
+              <div className="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-5 text-center">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Dagen er lukket</p>
+                <p className="mt-1 text-xs text-muted-foreground">Det er ikke muligt at tjekke ind, da dagen er afsluttet.</p>
+              </div>
+            ) : (
+              <button
+                onClick={handleAction}
+                disabled={pageState === "submitting"}
+                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-4 text-lg font-semibold text-primary-foreground shadow-glow transition disabled:opacity-50"
+              >
+                {pageState === "submitting" ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <LogIn className="h-5 w-5" />
+                    Tjek ind
+                  </>
+                )}
+              </button>
+            )}
           </>
         )}
       </div>

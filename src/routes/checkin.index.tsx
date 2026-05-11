@@ -28,6 +28,7 @@ function PinCheckinPage() {
   const [doneLocation, setDoneLocation] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [dayClosed, setDayClosed] = useState(false);
 
   const loadStatus = useCallback(async () => {
     setPageState("loading");
@@ -40,8 +41,19 @@ function PinCheckinPage() {
       setUserName(session.user.email.split("@")[0]);
     }
 
+    const todayStr = new Date().toISOString().slice(0, 10);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    if (aktivOrgId) {
+      const { data: ds } = await supabase
+        .from("day_status")
+        .select("is_closed")
+        .eq("organization_id", aktivOrgId)
+        .eq("date", todayStr)
+        .maybeSingle();
+      setDayClosed(!!ds?.is_closed);
+    }
 
     const { data: checkin } = await (supabase as any)
       .from("staff_checkins")
@@ -57,7 +69,7 @@ function PinCheckinPage() {
         : null,
     );
     setPageState("idle");
-  }, []);
+  }, [aktivOrgId]);
 
   const loadLocations = useCallback(async () => {
     if (!aktivOrgId) return;
@@ -283,7 +295,7 @@ function PinCheckinPage() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={pageState === "submitting" || pin.length < 4 || !selectedId}
+            disabled={pageState === "submitting" || pin.length < 4 || !selectedId || (dayClosed && !isCheckedIn)}
             className={`flex h-14 items-center justify-center rounded-xl text-sm font-semibold text-white shadow-sm transition disabled:opacity-50 ${
               isCheckedIn ? "bg-amber-500 hover:bg-amber-600" : "bg-gradient-primary shadow-glow"
             }`}
@@ -299,8 +311,17 @@ function PinCheckinPage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          {isCheckedIn ? "Indtast PIN for at registrere udtjekning" : "Indtast lokationens PIN-kode"}
+          {dayClosed && !isCheckedIn
+            ? "Dagen er lukket — tjek ind er ikke tilgængeligt"
+            : isCheckedIn
+            ? "Indtast PIN for at registrere udtjekning"
+            : "Indtast lokationens PIN-kode"}
         </p>
+        {dayClosed && !isCheckedIn && (
+          <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Dagen er afsluttet</p>
+          </div>
+        )}
       </div>
     </div>
   );

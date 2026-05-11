@@ -553,6 +553,20 @@ function VagtplanSide() {
 
   useEffect(() => { loadShifts(); }, [loadShifts]);
 
+  // Real-time: reload shifts when shifts or assignments change
+  useEffect(() => {
+    if (!aktivOrgId) return;
+    const ch = supabase.channel(`vagtplan-shifts-${aktivOrgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shifts", filter: `organization_id=eq.${aktivOrgId}` },
+        () => loadShifts())
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shift_assignments", filter: `organization_id=eq.${aktivOrgId}` },
+        () => loadShifts())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [aktivOrgId, loadShifts]);
+
   const prevWeek = () => setWeekStart((d) => addDays(d, -7));
   const nextWeek = () => setWeekStart((d) => addDays(d, 7));
   const goToday = () => setWeekStart(getWeekStart(new Date()));
@@ -820,6 +834,19 @@ function AabneVagterTab({ orgId }: { orgId: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Real-time for open shifts
+  useEffect(() => {
+    const ch = supabase.channel(`open-shifts-${orgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shifts", filter: `organization_id=eq.${orgId}` },
+        () => load())
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shift_assignments", filter: `organization_id=eq.${orgId}` },
+        () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, load]);
+
   const claim = async (shiftId: string) => {
     setClaiming(shiftId);
     try {
@@ -959,6 +986,15 @@ function VagtbytteTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
   }, [orgId, userId, erAdmin]);
 
   useEffect(() => { if (userId) load(); }, [load, userId]);
+
+  useEffect(() => {
+    const ch = supabase.channel(`swaps-${orgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shift_swaps", filter: `organization_id=eq.${orgId}` },
+        () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, load]);
 
   const createSwap = async () => {
     if (!selectedShift || !userId) return;
@@ -1174,6 +1210,15 @@ function FravaerTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
 
   useEffect(() => { if (userId) load(); }, [load, userId]);
 
+  useEffect(() => {
+    const ch = supabase.channel(`absences-${orgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "absence_requests", filter: `organization_id=eq.${orgId}` },
+        () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, load]);
+
   const submit = async () => {
     if (!userId) return;
     const { error } = await (supabase as any).from("absence_requests").insert({
@@ -1329,6 +1374,15 @@ function TimebankTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
   }, [orgId, userId, erAdmin]);
 
   useEffect(() => { if (userId) load(); }, [load, userId]);
+
+  useEffect(() => {
+    const ch = supabase.channel(`timebank-${orgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "time_bank", filter: `organization_id=eq.${orgId}` },
+        () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, load]);
 
   const addEntry = async () => {
     if (!hours || !userId || !erAdmin) return;
