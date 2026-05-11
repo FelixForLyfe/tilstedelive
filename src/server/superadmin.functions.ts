@@ -436,7 +436,7 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
 
     const { data: keys, error } = await (supabaseAdmin as any)
       .from("plan_keys")
-      .select("id, code, plan_type, label, is_promo, max_uses, uses_count, expires_at, used, used_at, created_at, used_by, organizations(name)")
+      .select("id, code, plan_type, label, is_promo, max_uses, uses_count, expires_at, price_dkk, discount_pct, used, used_at, created_at, used_by, organizations(name)")
       .order("created_at", { ascending: false });
 
     if (error && isMissingTable(error)) return [];
@@ -451,6 +451,8 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
       maxUses: (k.max_uses ?? null) as number | null,
       usesCount: (k.uses_count ?? 0) as number,
       expiresAt: (k.expires_at ?? null) as string | null,
+      priceDkk: (k.price_dkk ?? null) as number | null,
+      discountPct: (k.discount_pct ?? null) as number | null,
       used: k.used as boolean,
       usedAt: k.used_at as string | null,
       usedByOrgName: (k.organizations?.name ?? null) as string | null,
@@ -476,6 +478,8 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
       isPromo: z.boolean().optional(),
       maxUses: z.number().int().min(1).nullable().optional(),
       expiresAt: z.string().nullable().optional(),
+      priceDkk: z.number().int().min(0).nullable().optional(),
+      discountPct: z.number().int().min(0).max(100).nullable().optional(),
     }).parse(d),
   )
   .handler(async ({ data }) => {
@@ -493,6 +497,8 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
           is_promo: data.isPromo ?? false,
           max_uses: data.maxUses ?? null,
           expires_at: data.expiresAt ?? null,
+          price_dkk: data.priceDkk ?? null,
+          discount_pct: data.discountPct ?? null,
           created_by: user.id,
         })
         .select("id")
@@ -520,6 +526,8 @@ export const superadminUpdatePlanKey = createServerFn({ method: "POST" })
       isPromo: z.boolean().optional(),
       maxUses: z.number().int().min(1).nullable().optional(),
       expiresAt: z.string().nullable().optional(),
+      priceDkk: z.number().int().min(0).nullable().optional(),
+      discountPct: z.number().int().min(0).max(100).nullable().optional(),
     }).parse(d),
   )
   .handler(async ({ data }) => {
@@ -532,6 +540,8 @@ export const superadminUpdatePlanKey = createServerFn({ method: "POST" })
         is_promo: data.isPromo ?? false,
         max_uses: data.maxUses ?? null,
         expires_at: data.expiresAt ?? null,
+        price_dkk: data.priceDkk ?? null,
+        discount_pct: data.discountPct ?? null,
       })
       .eq("id", data.keyId);
     if (error) throw new Error(error.message);

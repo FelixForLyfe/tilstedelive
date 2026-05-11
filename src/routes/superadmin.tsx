@@ -102,6 +102,8 @@ type PlanKey = {
   maxUses: number | null;
   usesCount: number;
   expiresAt: string | null;
+  priceDkk: number | null;
+  discountPct: number | null;
   used: boolean;
   usedAt: string | null;
   usedByOrgName: string | null;
@@ -1289,6 +1291,7 @@ function KeysTab({ accessToken }: { accessToken: string }) {
                 <th className="px-4 py-3 text-left">Label</th>
                 <th className="px-4 py-3 text-left">Plan</th>
                 <th className="px-4 py-3 text-left">Type</th>
+                <th className="px-4 py-3 text-right">Pris</th>
                 <th className="px-4 py-3 text-left">Brug</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Udløb</th>
@@ -1298,9 +1301,9 @@ function KeysTab({ accessToken }: { accessToken: string }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Indlæser…</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">Indlæser…</td></tr>
               ) : filtrede.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
                   <Key className="mx-auto mb-3 h-8 w-8 opacity-30" />
                   {soeg ? "Ingen nøgler matcher søgningen" : "Ingen nøgler endnu. Klik \"Ny nøgle\" for at oprette."}
                 </td></tr>
@@ -1327,6 +1330,19 @@ function KeysTab({ accessToken }: { accessToken: string }) {
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${k.isPromo ? "bg-violet-500/15 text-violet-600" : "bg-surface text-muted-foreground border border-border"}`}>
                           {k.isPromo ? "Kampagne" : "Engangskode"}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs font-medium">
+                        {(() => {
+                          const base = TIER_PRICES[k.planType] ?? 0;
+                          if (k.priceDkk !== null) return <span>{fmtKr(k.priceDkk)}</span>;
+                          if (k.discountPct !== null) return (
+                            <span className="text-success">
+                              {fmtKr(Math.round(base * (1 - k.discountPct / 100)))}
+                              <span className="ml-1 text-muted-foreground opacity-70">-{k.discountPct}%</span>
+                            </span>
+                          );
+                          return <span className="text-muted-foreground">{fmtKr(base)}</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {k.isPromo
@@ -1408,6 +1424,8 @@ function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
   const [isPromo, setIsPromo] = useState(planKey?.isPromo ?? false);
   const [maxUses, setMaxUses] = useState<string>(planKey?.maxUses?.toString() ?? "");
   const [expiresAt, setExpiresAt] = useState(planKey?.expiresAt?.slice(0, 10) ?? "");
+  const [priceDkk, setPriceDkk] = useState<string>(planKey?.priceDkk?.toString() ?? "");
+  const [discountPct, setDiscountPct] = useState<string>(planKey?.discountPct?.toString() ?? "");
   const [saving, setSaving] = useState(false);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copiedGenerated, setCopiedGenerated] = useState(false);
@@ -1417,6 +1435,8 @@ function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
     try {
       const maxUsesNum = maxUses.trim() ? parseInt(maxUses, 10) : null;
       const expiresAtVal = expiresAt ? new Date(expiresAt).toISOString() : null;
+      const priceDkkNum = priceDkk.trim() ? parseInt(priceDkk, 10) : null;
+      const discountPctNum = discountPct.trim() ? parseInt(discountPct, 10) : null;
 
       if (isEdit && planKey) {
         await superadminUpdatePlanKey({
@@ -1428,6 +1448,8 @@ function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
             isPromo,
             maxUses: isPromo ? maxUsesNum : null,
             expiresAt: isPromo ? expiresAtVal : null,
+            priceDkk: priceDkkNum,
+            discountPct: discountPctNum,
           },
         });
         toast.success("Nøgle opdateret");
@@ -1441,6 +1463,8 @@ function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
             isPromo,
             maxUses: isPromo ? maxUsesNum : null,
             expiresAt: isPromo ? expiresAtVal : null,
+            priceDkk: priceDkkNum,
+            discountPct: discountPctNum,
           },
         });
         const code = (result as any).code as string;
@@ -1534,6 +1558,35 @@ function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
                 <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
                   className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
               </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Pris (kr./md.)</label>
+              <input type="number" min="0" value={priceDkk} onChange={(e) => { setPriceDkk(e.target.value); if (e.target.value) setDiscountPct(""); }}
+                placeholder={`Standard ${fmtKr(TIER_PRICES[planType] ?? 0)}`}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Rabat %</label>
+              <input type="number" min="0" max="100" value={discountPct} onChange={(e) => { setDiscountPct(e.target.value); if (e.target.value) setPriceDkk(""); }}
+                placeholder="0%"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+          {(priceDkk || discountPct) && (
+            <div className="rounded-xl bg-surface px-4 py-2.5 text-sm">
+              <span className="text-muted-foreground">Effektiv pris: </span>
+              <span className="font-semibold text-success">
+                {priceDkk
+                  ? fmtKr(parseInt(priceDkk, 10) || 0)
+                  : fmtKr(Math.round((TIER_PRICES[planType] ?? 0) * (1 - (parseInt(discountPct, 10) || 0) / 100)))
+                }
+              </span>
+              {discountPct && !priceDkk && (
+                <span className="ml-2 text-xs text-muted-foreground line-through">{fmtKr(TIER_PRICES[planType] ?? 0)}</span>
+              )}
             </div>
           )}
         </div>
