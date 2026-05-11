@@ -31,6 +31,7 @@ import { Route as LoginAdminRouteImport } from './routes/login.admin'
 import { Route as CheckoutSuccesRouteImport } from './routes/checkout.succes'
 import { Route as CheckoutAnnulleretRouteImport } from './routes/checkout.annulleret'
 import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
+import { Route as AppVagtplanRouteImport } from './routes/app.vagtplan'
 import { Route as AppLogningRouteImport } from './routes/app.logning'
 import { Route as AppIndstillingerRouteImport } from './routes/app.indstillinger'
 import { Route as AppArkivRouteImport } from './routes/app.arkiv'
@@ -147,6 +148,11 @@ const CheckinCodeRoute = CheckinCodeRouteImport.update({
   path: '/$code',
   getParentRoute: () => CheckinRoute,
 } as any)
+const AppVagtplanRoute = AppVagtplanRouteImport.update({
+  id: '/vagtplan',
+  path: '/vagtplan',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLogningRoute = AppLogningRouteImport.update({
   id: '/logning',
   path: '/logning',
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/app/vagtplan': typeof AppVagtplanRoute
   '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
@@ -216,6 +223,7 @@ export interface FileRoutesByTo {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/app/vagtplan': typeof AppVagtplanRoute
   '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/app/vagtplan': typeof AppVagtplanRoute
   '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/app/vagtplan'
     | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
@@ -302,6 +312,7 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/app/vagtplan'
     | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
@@ -331,6 +342,7 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/app/vagtplan'
     | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
@@ -516,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckinCodeRouteImport
       parentRoute: typeof CheckinRoute
     }
+    '/app/vagtplan': {
+      id: '/app/vagtplan'
+      path: '/vagtplan'
+      fullPath: '/app/vagtplan'
+      preLoaderRoute: typeof AppVagtplanRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/logning': {
       id: '/app/logning'
       path: '/logning'
@@ -560,6 +579,7 @@ interface AppRouteChildren {
   AppArkivRoute: typeof AppArkivRoute
   AppIndstillingerRoute: typeof AppIndstillingerRoute
   AppLogningRoute: typeof AppLogningRoute
+  AppVagtplanRoute: typeof AppVagtplanRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -569,6 +589,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppArkivRoute: AppArkivRoute,
   AppIndstillingerRoute: AppIndstillingerRoute,
   AppLogningRoute: AppLogningRoute,
+  AppVagtplanRoute: AppVagtplanRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
@@ -633,12 +654,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

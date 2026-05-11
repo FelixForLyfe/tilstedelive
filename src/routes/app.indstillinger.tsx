@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare, Clock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare, Clock, CalendarDays, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
@@ -31,7 +31,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "status", label: "Status", description: "Fremmøde- og statusoversigt for deltagere." },
   { key: "aktiviteter", label: "Aktiviteter", description: "Planlæg og log aktiviteter og opgaver." },
   { key: "arbejdstidslog", label: "Tjek ind", description: "Giver personale mulighed for at tjekke ind og ud via QR-kode eller PIN." },
-  { key: "vagtplan", label: "Vagtplan", description: "Digital vagtplan for personalet.", comingSoon: true },
+  { key: "vagtplan", label: "Vagtplan", description: "Digital vagtplan for personalet." },
 ];
 
 const CHECKIN_METHODS: { value: CheckinMethod; label: string; icon: any; description: string }[] = [
@@ -59,6 +59,290 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
         }`}
       />
     </button>
+  );
+}
+
+type CustomRole = { name: string; color: string };
+
+type VagtplanSettings = {
+  planning_period: "weekly" | "biweekly" | "monthly";
+  publish_deadline_days: number;
+  min_rest_hours: number;
+  max_weekly_hours: number;
+  min_notice_hours: number;
+  allow_self_swap: boolean;
+  overtime_after_hours: number;
+  weekend_rate_multiplier: number;
+  evening_rate_multiplier: number;
+  custom_roles: CustomRole[];
+};
+
+const DEFAULT_VAGTPLAN: VagtplanSettings = {
+  planning_period: "weekly",
+  publish_deadline_days: 3,
+  min_rest_hours: 11,
+  max_weekly_hours: 48,
+  min_notice_hours: 2,
+  allow_self_swap: false,
+  overtime_after_hours: 37,
+  weekend_rate_multiplier: 1.5,
+  evening_rate_multiplier: 1.3,
+  custom_roles: [
+    { name: "Medarbejder", color: "#6366f1" },
+    { name: "Kasseassistent", color: "#f59e0b" },
+    { name: "Lager", color: "#10b981" },
+    { name: "Manager", color: "#ef4444" },
+  ],
+};
+
+function VagtplanSettingsSection({ orgId }: { orgId: string }) {
+  const [settings, setSettings] = useState<VagtplanSettings>(DEFAULT_VAGTPLAN);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleColor, setNewRoleColor] = useState("#6366f1");
+
+  const load = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("vagtplan_settings")
+      .select("*")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (data) {
+      setSettings({
+        planning_period: data.planning_period ?? "weekly",
+        publish_deadline_days: data.publish_deadline_days ?? 3,
+        min_rest_hours: data.min_rest_hours ?? 11,
+        max_weekly_hours: data.max_weekly_hours ?? 48,
+        min_notice_hours: data.min_notice_hours ?? 2,
+        allow_self_swap: data.allow_self_swap ?? false,
+        overtime_after_hours: Number(data.overtime_after_hours ?? 37),
+        weekend_rate_multiplier: Number(data.weekend_rate_multiplier ?? 1.5),
+        evening_rate_multiplier: Number(data.evening_rate_multiplier ?? 1.3),
+        custom_roles: Array.isArray(data.custom_roles) ? data.custom_roles : DEFAULT_VAGTPLAN.custom_roles,
+      });
+    }
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (updates: Partial<VagtplanSettings>) => {
+    const next = { ...settings, ...updates };
+    setSettings(next);
+    setSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("vagtplan_settings")
+        .upsert({ organization_id: orgId, ...next, updated_at: new Date().toISOString() }, { onConflict: "organization_id" });
+      if (error) throw error;
+    } catch {
+      toast.error("Kunne ikke gemme vagtplan-indstillinger.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addRole = () => {
+    const name = newRoleName.trim();
+    if (!name) return;
+    if (settings.custom_roles.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
+      toast.error("En rolle med dette navn findes allerede.");
+      return;
+    }
+    save({ custom_roles: [...settings.custom_roles, { name, color: newRoleColor }] });
+    setNewRoleName("");
+    setNewRoleColor("#6366f1");
+  };
+
+  const removeRole = (idx: number) => {
+    save({ custom_roles: settings.custom_roles.filter((_, i) => i !== idx) });
+  };
+
+  const updateRoleColor = (idx: number, color: string) => {
+    const roles = settings.custom_roles.map((r, i) => i === idx ? { ...r, color } : r);
+    save({ custom_roles: roles });
+  };
+
+  const updateRoleName = (idx: number, name: string) => {
+    const roles = settings.custom_roles.map((r, i) => i === idx ? { ...r, name } : r);
+    setSettings((s) => ({ ...s, custom_roles: roles }));
+  };
+
+  const saveRoleName = (idx: number) => {
+    save({ custom_roles: settings.custom_roles });
+  };
+
+  if (loading) return <div className="text-sm text-muted-foreground">Indlæser…</div>;
+
+  return (
+    <div className="space-y-5">
+      {/* Planning period */}
+      <div>
+        <label className="block text-sm font-medium mb-1.5">Planlægningsperiode</label>
+        <select
+          value={settings.planning_period}
+          onChange={(e) => save({ planning_period: e.target.value as any })}
+          disabled={saving}
+          className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+        >
+          <option value="weekly">Ugentlig</option>
+          <option value="biweekly">Hver 2. uge</option>
+          <option value="monthly">Månedlig</option>
+        </select>
+      </div>
+
+      {/* Numeric fields */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Publiceringsdeadline (dage)</label>
+          <input
+            type="number" min={0} max={14}
+            value={settings.publish_deadline_days}
+            onChange={(e) => save({ publish_deadline_days: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Dage inden vagt skal publiceres</p>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Min. hvile mellem vagter (timer)</label>
+          <input
+            type="number" min={8} max={24}
+            value={settings.min_rest_hours}
+            onChange={(e) => save({ min_rest_hours: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Dansk lov kræver min. 11 timer</p>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Maks. ugentlige timer</label>
+          <input
+            type="number" min={1} max={84}
+            value={settings.max_weekly_hours}
+            onChange={(e) => save({ max_weekly_hours: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">EU-direktiv: maks. 48 timer/uge</p>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Min. varsel ved sygdom (timer)</label>
+          <input
+            type="number" min={0} max={48}
+            value={settings.min_notice_hours}
+            onChange={(e) => save({ min_notice_hours: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Overarbejde efter (timer/uge)</label>
+          <input
+            type="number" min={1} max={84} step={0.5}
+            value={settings.overtime_after_hours}
+            onChange={(e) => save({ overtime_after_hours: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Standard 37 timer (fuldtid)</p>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Weekendtillæg (multiplikator)</label>
+          <input
+            type="number" min={1} max={3} step={0.05}
+            value={settings.weekend_rate_multiplier}
+            onChange={(e) => save({ weekend_rate_multiplier: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">F.eks. 1.5 = 50% tillæg</p>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Aftentillæg (multiplikator)</label>
+          <input
+            type="number" min={1} max={3} step={0.05}
+            value={settings.evening_rate_multiplier}
+            onChange={(e) => save({ evening_rate_multiplier: Number(e.target.value) })}
+            disabled={saving}
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none disabled:opacity-50"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">F.eks. 1.3 = 30% tillæg</p>
+        </div>
+      </div>
+
+      {/* Allow self-swap */}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
+        <div>
+          <p className="text-sm font-medium">Tillad vagt-bytte uden godkendelse</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Personale kan bytte vagter direkte uden manager-godkendelse.</p>
+        </div>
+        <Toggle
+          checked={settings.allow_self_swap}
+          onChange={(v) => save({ allow_self_swap: v })}
+          disabled={saving}
+        />
+      </div>
+
+      {/* Custom roles */}
+      <div>
+        <p className="text-sm font-medium mb-2">Roller</p>
+        <div className="space-y-2">
+          {settings.custom_roles.map((role, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <input
+                type="color"
+                value={role.color}
+                onChange={(e) => updateRoleColor(idx, e.target.value)}
+                className="h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-input bg-background p-0.5"
+                title="Vælg farve"
+              />
+              <input
+                type="text"
+                value={role.name}
+                onChange={(e) => updateRoleName(idx, e.target.value)}
+                onBlur={() => saveRoleName(idx)}
+                className="flex-1 rounded-xl border border-input bg-background px-3 py-1.5 text-sm focus:border-ring focus:outline-none"
+              />
+              <button
+                onClick={() => removeRole(idx)}
+                disabled={saving || settings.custom_roles.length <= 1}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive disabled:opacity-30"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add new role */}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="color"
+            value={newRoleColor}
+            onChange={(e) => setNewRoleColor(e.target.value)}
+            className="h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-input bg-background p-0.5"
+            title="Vælg farve"
+          />
+          <input
+            type="text"
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addRole()}
+            placeholder="Ny rolle…"
+            className="flex-1 rounded-xl border border-input bg-background px-3 py-1.5 text-sm focus:border-ring focus:outline-none"
+          />
+          <button
+            onClick={addRole}
+            disabled={!newRoleName.trim() || saving}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-30"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -258,6 +542,22 @@ function IndstillingerSide() {
           </p>
         )}
       </div>
+
+      {/* Vagtplan settings — only visible when vagtplan is enabled */}
+      {flags.vagtplan && aktivOrgId && (
+        <div className="glass rounded-2xl p-6">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <CalendarDays className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold">Vagtplan</h2>
+              <p className="text-xs text-muted-foreground">Regler og roller for vagtplanlægning.</p>
+            </div>
+          </div>
+          <VagtplanSettingsSection orgId={aktivOrgId} />
+        </div>
+      )}
 
       {/* Logning */}
       <div className="glass rounded-2xl p-6">

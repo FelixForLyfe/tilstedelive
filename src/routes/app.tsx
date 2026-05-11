@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard, Settings, QrCode } from "lucide-react";
+import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard, Settings, QrCode, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -151,6 +151,7 @@ function AppLayout() {
     ...(flags.aktiviteter ? [{ to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity }] : []),
     { to: "/app/logning", label: "Logning", icon: Clock },
     ...(flags.arbejdstidslog && flags.checkin_method !== "none" ? [{ to: "/checkin", label: "Tjek ind", icon: QrCode }] : []),
+    ...(flags.vagtplan ? [{ to: "/app/vagtplan", label: "Vagtplan", icon: CalendarDays }] : []),
     ...(erAdmin ? [
       { to: "/app/arkiv", label: "Arkiv", icon: Archive },
       { to: "/app/admin", label: "Admin", icon: ShieldCheck },

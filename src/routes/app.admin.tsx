@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2, ScrollText, ShieldCheck, QrCode, Download, KeySquare, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2, ScrollText, ShieldCheck, QrCode, Download, KeySquare, Eye, EyeOff, CheckCircle2, CalendarDays } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
+import { useFeatureFlags } from "@/contexts/FeatureFlagsContext";
 import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
 import { useChildPhoto } from "@/lib/childPhoto";
@@ -15,10 +16,11 @@ export const Route = createFileRoute("/app/admin")({
   component: AdminSide,
 });
 
-type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog" | "checkin";
+type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog" | "checkin" | "vagtskabeloner";
 
 function AdminSide() {
   const { aktivOrgId, erAdmin, terms } = useOrg();
+  const { flags } = useFeatureFlags();
   const [tab, setTab] = useState<Tab>("boern");
 
   if (!erAdmin) {
@@ -34,6 +36,7 @@ function AdminSide() {
     { id: "personale", label: "Personale", icon: UserCog },
     { id: "auditlog", label: "Aktivitetslog", icon: ScrollText },
     { id: "checkin", label: "Tjek ind", icon: QrCode },
+    ...(flags.vagtplan ? [{ id: "vagtskabeloner" as Tab, label: "Vagter", icon: CalendarDays }] : []),
   ];
 
   return (
@@ -58,6 +61,7 @@ function AdminSide() {
       {aktivOrgId && tab === "personale" && <PersonalePanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "auditlog" && <AuditLogPanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "checkin" && <CheckinPanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "vagtskabeloner" && flags.vagtplan && <VagtSkabelonerPanel orgId={aktivOrgId} />}
     </div>
   );
 }
@@ -1088,6 +1092,475 @@ function CheckinPanel({ orgId }: { orgId: string }) {
           onSaved={loadLocations}
         />
       )}
+    </div>
+  );
+}
+
+// ===== VAGTER ADMIN PANEL (templates + availability) =====
+type ShiftTemplate = {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  role: string | null;
+  color: string;
+};
+
+type VagtAdminTab = "skabeloner" | "tilgængelighed" | "løneksport";
+
+function VagtSkabelonerPanel({ orgId }: { orgId: string }) {
+  const [vagtTab, setVagtTab] = useState<VagtAdminTab>("skabeloner");
+
+  const tabLabels: Record<VagtAdminTab, string> = {
+    skabeloner: "Vagtskabeloner",
+    tilgængelighed: "Tilgængelighed",
+    løneksport: "Løneksport",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 flex-wrap">
+        {(["skabeloner", "tilgængelighed", "løneksport"] as VagtAdminTab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setVagtTab(t)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              vagtTab === t ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tabLabels[t]}
+          </button>
+        ))}
+      </div>
+      {vagtTab === "skabeloner" && <SkabelonerTab orgId={orgId} />}
+      {vagtTab === "tilgængelighed" && <Tilgængelighed orgId={orgId} />}
+      {vagtTab === "løneksport" && <LøneksportTab orgId={orgId} />}
+    </div>
+  );
+}
+
+function SkabelonerTab({ orgId }: { orgId: string }) {
+  const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("16:00");
+  const [role, setRole] = useState("");
+  const [color, setColor] = useState("#6366f1");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("shift_templates")
+      .select("id,name,start_time,end_time,role,color")
+      .eq("organization_id", orgId)
+      .order("name");
+    setTemplates(data ?? []);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const resetForm = () => {
+    setName(""); setStartTime("08:00"); setEndTime("16:00");
+    setRole(""); setColor("#6366f1"); setEditId(null); setShowForm(false);
+  };
+
+  const startEdit = (t: ShiftTemplate) => {
+    setName(t.name);
+    setStartTime(t.start_time.slice(0, 5));
+    setEndTime(t.end_time.slice(0, 5));
+    setRole(t.role ?? "");
+    setColor(t.color ?? "#6366f1");
+    setEditId(t.id);
+    setShowForm(true);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        organization_id: orgId,
+        name: name.trim(),
+        start_time: startTime,
+        end_time: endTime,
+        role: role.trim() || null,
+        color,
+      };
+      let error;
+      if (editId) {
+        ({ error } = await (supabase as any).from("shift_templates").update(payload).eq("id", editId));
+      } else {
+        ({ error } = await (supabase as any).from("shift_templates").insert(payload));
+      }
+      if (error) throw error;
+      toast.success(editId ? "Skabelon opdateret." : "Skabelon oprettet.");
+      resetForm();
+      load();
+    } catch {
+      toast.error("Kunne ikke gemme skabelon.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("Slet denne skabelon?")) return;
+    const { error } = await (supabase as any).from("shift_templates").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Skabelon slettet.");
+    load();
+  };
+
+  const formatTime = (t: string) => t.slice(0, 5);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold">Vagtskabeloner</h2>
+          <p className="text-xs text-muted-foreground">Genbrugelige vagtkonfigurationer der kan bruges i vagtplanen.</p>
+        </div>
+        <button
+          onClick={() => { resetForm(); setShowForm(true); }}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+        >
+          <Plus className="h-4 w-4" /> Ny skabelon
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={submit} className="glass rounded-2xl p-5 space-y-4">
+          <h3 className="font-medium">{editId ? "Rediger skabelon" : "Ny vagtskabelon"}</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-muted-foreground mb-1">Navn *</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="F.eks. Dagvagt, Aftenvagt…"
+                required
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Starttidspunkt</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Sluttidspunkt</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Rolle</label>
+              <input
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="F.eks. Kasseassistent"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Farve</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded-lg border border-input bg-background p-1"
+                />
+                <span className="text-sm font-mono text-muted-foreground">{color}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={resetForm} className="rounded-xl border border-border px-4 py-2 text-sm">
+              Annuller
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {saving ? "Gemmer…" : editId ? "Gem ændringer" : "Opret skabelon"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Indlæser…</div>
+      ) : templates.length === 0 ? (
+        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          Ingen skabeloner endnu. Opret din første vagtskabelon.
+        </div>
+      ) : (
+        <div className="glass rounded-2xl divide-y divide-border overflow-hidden">
+          {templates.map((t) => (
+            <div key={t.id} className="flex items-center gap-4 px-5 py-3">
+              <div
+                className="h-8 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: t.color ?? "#6366f1" }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm">{t.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatTime(t.start_time)} – {formatTime(t.end_time)}
+                  {t.role ? ` · ${t.role}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => startEdit(t)}
+                  className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  Rediger
+                </button>
+                <button
+                  onClick={() => remove(t.id)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Staff availability (admin view of all staff)
+const DAY_LABELS = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
+
+type StaffAvailability = {
+  id: string;
+  user_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  profiles?: { full_name: string | null; email?: string | null };
+};
+
+function Tilgængelighed({ orgId }: { orgId: string }) {
+  const [rows, setRows] = useState<StaffAvailability[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("staff_availability")
+      .select("id,user_id,day_of_week,start_time,end_time,profiles(full_name)")
+      .eq("organization_id", orgId)
+      .order("day_of_week")
+      .order("start_time");
+    setRows(data ?? []);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Group by user
+  const byUser = rows.reduce<Record<string, { name: string; days: StaffAvailability[] }>>((acc, r) => {
+    const uid = r.user_id;
+    if (!acc[uid]) acc[uid] = { name: r.profiles?.full_name ?? uid.slice(0, 8), days: [] };
+    acc[uid].days.push(r);
+    return acc;
+  }, {});
+
+  const formatTime = (t: string) => t.slice(0, 5);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-semibold">Personalets tilgængelighed</h2>
+        <p className="text-xs text-muted-foreground">Oversigt over hvornår personale har angivet de er tilgængelige. Personale redigerer dette selv under Vagtplan.</p>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Indlæser…</div>
+      ) : Object.keys(byUser).length === 0 ? (
+        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          Ingen tilgængelighed registreret endnu.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(byUser).map(([uid, { name, days }]) => (
+            <div key={uid} className="glass rounded-2xl p-4">
+              <p className="font-medium text-sm mb-2">{name}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {days.map((d) => (
+                  <span key={d.id} className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    {DAY_LABELS[d.day_of_week]} {formatTime(d.start_time)}–{formatTime(d.end_time)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== LØNEKSPORT =====
+function LøneksportTab({ orgId }: { orgId: string }) {
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [exporting, setExporting] = useState(false);
+  const [format, setFormat] = useState<"standard" | "datalon">("standard");
+
+  const exportCSV = async () => {
+    setExporting(true);
+    try {
+      // Fetch all published shifts with assignments in range
+      const { data: shifts } = await (supabase as any)
+        .from("shifts")
+        .select("id,date,start_time,end_time,role,shift_assignments(user_id,status,profiles(full_name))")
+        .eq("organization_id", orgId)
+        .eq("status", "published")
+        .gte("date", fromDate)
+        .lte("date", toDate)
+        .order("date")
+        .order("start_time");
+
+      if (!shifts || shifts.length === 0) {
+        toast.info("Ingen publicerede vagter i perioden.");
+        return;
+      }
+
+      const rows: string[][] = [];
+
+      if (format === "datalon") {
+        // Dataløn-compatible format
+        rows.push(["Medarbejder", "Dato", "Starttime", "Sluttimer", "Timer", "Rolle", "Tillægstype"]);
+        for (const s of shifts) {
+          const [sh, sm] = s.start_time.split(":").map(Number);
+          const [eh, em] = s.end_time.split(":").map(Number);
+          const minutes = (eh * 60 + em) - (sh * 60 + sm);
+          const hours = (minutes / 60).toFixed(2);
+          const dayOfWeek = new Date(s.date).getDay();
+          const weekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const evening = eh >= 18;
+          const supplement = weekend ? "Weekend" : evening ? "Aften" : "Normal";
+          for (const a of s.shift_assignments ?? []) {
+            rows.push([
+              a.profiles?.full_name ?? a.user_id,
+              s.date,
+              s.start_time.slice(0, 5),
+              s.end_time.slice(0, 5),
+              hours,
+              s.role ?? "",
+              supplement,
+            ]);
+          }
+        }
+      } else {
+        // Standard format
+        rows.push(["Navn", "Dato", "Ugedag", "Starttime", "Sluttimer", "Timer", "Rolle"]);
+        for (const s of shifts) {
+          const [sh, sm] = s.start_time.split(":").map(Number);
+          const [eh, em] = s.end_time.split(":").map(Number);
+          const minutes = (eh * 60 + em) - (sh * 60 + sm);
+          const hours = (minutes / 60).toFixed(2);
+          const weekday = new Date(s.date).toLocaleDateString("da-DK", { weekday: "long" });
+          for (const a of s.shift_assignments ?? []) {
+            rows.push([
+              a.profiles?.full_name ?? a.user_id,
+              s.date,
+              weekday,
+              s.start_time.slice(0, 5),
+              s.end_time.slice(0, 5),
+              hours,
+              s.role ?? "",
+            ]);
+          }
+        }
+      }
+
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+      const bom = "﻿";
+      const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vagter_${fromDate}_${toDate}_${format}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("CSV downloadet.");
+    } catch {
+      toast.error("Kunne ikke eksportere.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-semibold">Løneksport</h2>
+        <p className="text-xs text-muted-foreground">Eksporter publicerede vagter til CSV — kompatibelt med Dataløn og Zenegy.</p>
+      </div>
+
+      <div className="glass rounded-2xl p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Fra dato</label>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono focus:border-ring focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Til dato</label>
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono focus:border-ring focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Format</label>
+          <div className="grid grid-cols-2 gap-2">
+            {([["standard", "Standard CSV"], ["datalon", "Dataløn / Zenegy"]] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setFormat(val)}
+                className={`rounded-xl border px-3 py-2.5 text-sm text-left transition ${
+                  format === val ? "border-primary bg-primary/5 font-medium text-primary" : "border-border hover:border-primary/30"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={exportCSV}
+          disabled={exporting}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" />
+          {exporting ? "Eksporterer…" : "Download CSV"}
+        </button>
+      </div>
     </div>
   );
 }
