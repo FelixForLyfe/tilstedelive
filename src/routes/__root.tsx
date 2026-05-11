@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { CookieBanner } from "@/components/CookieBanner";
 import { applySecurityHeaders } from "@/lib/security-headers";
+import { PostHogProvider } from "@/components/PostHogProvider";
 
 function NotFoundComponent() {
   return (
@@ -79,15 +80,17 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <AuthProvider>
-      <OrgProvider>
-        <FeatureFlagsProvider>
-          <Outlet />
-          <Toaster richColors position="top-center" />
-          <InstallPrompt />
-          <CookieBanner />
-        </FeatureFlagsProvider>
-      </OrgProvider>
-    </AuthProvider>
+    <PostHogProvider>
+      <AuthProvider>
+        <OrgProvider>
+          <FeatureFlagsProvider>
+            <Outlet />
+            <Toaster richColors position="top-center" />
+            <InstallPrompt />
+            <CookieBanner />
+          </FeatureFlagsProvider>
+        </OrgProvider>
+      </AuthProvider>
+    </PostHogProvider>
   );
 }
