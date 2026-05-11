@@ -82,6 +82,7 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
       subscription_data: {
         metadata: { org_id: data.orgId },
       },
+      automatic_tax: { enabled: true },
       locale: "da",
     });
 

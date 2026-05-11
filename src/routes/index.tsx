@@ -950,6 +950,7 @@ function PricingTeaser() {
                 <span className={`font-display text-4xl font-bold ${p.highlight ? "text-primary-foreground" : ""}`}>{p.price}</span>
                 <span className={`text-sm ${p.highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}>kr/md</span>
               </div>
+              <p className={`text-xs ${p.highlight ? "text-primary-foreground/60" : "text-muted-foreground"}`}>ekskl. moms</p>
               <p className={`mt-1 text-xs ${p.highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{p.tagline}</p>
 
               <ul className="mt-5 space-y-2">
@@ -978,7 +979,10 @@ function PricingTeaser() {
           ))}
         </div>
 
-        <p className="mt-8 text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          Alle priser er ekskl. moms. Ved betaling tillægges 25% moms.
+        </p>
+        <p className="mt-3 text-center text-sm text-muted-foreground">
           Stor organisation eller kommune?{" "}
           <a href="mailto:support@tilstede.live" className="font-semibold text-primary hover:underline">
             Kontakt os for et tilbud →

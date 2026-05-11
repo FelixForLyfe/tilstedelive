@@ -118,6 +118,9 @@ function PlanKort({ plan, onVælg, loading }: { plan: Plan; onVælg: (id: Plan["
           DKK/md
         </span>
       </div>
+      <p className={`text-xs ${plan.fremhævet ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+        ekskl. moms
+      </p>
       <p className={`mt-1 text-sm ${plan.fremhævet ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
         {plan.tagline}
       </p>
@@ -248,7 +251,7 @@ function PriserSide() {
           ))}
         </div>
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Alle priser er ekskl. moms. Fakturering sker månedligt. Opsig når som helst.
+          Alle priser er ekskl. moms. Ved betaling tillægges 25% moms. Fakturering sker månedligt. Opsig når som helst.
         </p>
       </section>
 
