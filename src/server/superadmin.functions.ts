@@ -436,10 +436,9 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
 
     const { data: keys, error } = await (supabaseAdmin as any)
       .from("plan_keys")
-      .select("id, code, plan_type, label, used, used_at, created_at, used_by, organizations(name)")
+      .select("id, code, plan_type, label, is_promo, max_uses, uses_count, expires_at, used, used_at, created_at, used_by, organizations(name)")
       .order("created_at", { ascending: false });
 
-    // Table missing — migration 20260509200000 not yet applied
     if (error && isMissingTable(error)) return [];
     if (error) throw new Error(error.message);
 
@@ -448,9 +447,13 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
       code: k.code as string,
       planType: k.plan_type as string,
       label: (k.label ?? null) as string | null,
+      isPromo: (k.is_promo ?? false) as boolean,
+      maxUses: (k.max_uses ?? null) as number | null,
+      usesCount: (k.uses_count ?? 0) as number,
+      expiresAt: (k.expires_at ?? null) as string | null,
       used: k.used as boolean,
       usedAt: k.used_at as string | null,
-      usedByOrgName: k.organizations?.name as string | null,
+      usedByOrgName: (k.organizations?.name ?? null) as string | null,
       createdAt: k.created_at as string,
     }));
   });
@@ -466,38 +469,43 @@ function generateCode(): string {
 
 export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
   .inputValidator((d) =>
-    z
-      .object({
-        accessToken: z.string().min(1),
-        planType: z.enum(KEY_PLAN_TYPES),
-      })
-      .parse(d),
+    z.object({
+      accessToken: z.string().min(1),
+      planType: z.enum(KEY_PLAN_TYPES),
+      label: z.string().trim().optional(),
+      isPromo: z.boolean().optional(),
+      maxUses: z.number().int().min(1).nullable().optional(),
+      expiresAt: z.string().nullable().optional(),
+    }).parse(d),
   )
   .handler(async ({ data }) => {
     const user = await verifySuperadmin(data.accessToken);
 
     let code = generateCode();
-    let inserted = false;
+    let keyId: string | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const { error } = await (supabaseAdmin as any).from("plan_keys").insert({
-        code,
-        plan_type: data.planType,
-        created_by: user.id,
-      });
-      if (!error) {
-        inserted = true;
-        break;
-      }
-      if (isMissingTable(error)) {
-        throw new Error("plan_keys-tabellen eksisterer ikke endnu. Kør migration 20260509200000.");
-      }
-      if (error.code !== "23505") throw new Error(error.message);
+      const { data: inserted, error } = await (supabaseAdmin as any)
+        .from("plan_keys")
+        .insert({
+          code,
+          plan_type: data.planType,
+          label: data.label ?? null,
+          is_promo: data.isPromo ?? false,
+          max_uses: data.maxUses ?? null,
+          expires_at: data.expiresAt ?? null,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      if (!error && inserted) { keyId = inserted.id; break; }
+      if (error && isMissingTable(error)) throw new Error("plan_keys-tabellen mangler. Kør migration 20260509200000.");
+      if (error?.code !== "23505") throw new Error(error?.message ?? "Ukendt fejl");
       code = generateCode();
     }
-    if (!inserted) throw new Error("Kunne ikke generere unik nøgle. Prøv igen.");
+    if (!keyId) throw new Error("Kunne ikke generere unik nøgle. Prøv igen.");
 
-    await auditLog(user.id, "SUPERADMIN_GENERATE_KEY", null, { code, plan_type: data.planType });
-    return { code };
+    await auditLog(user.id, "SUPERADMIN_GENERATE_KEY", null, { code, plan_type: data.planType, is_promo: data.isPromo ?? false });
+    return { id: keyId, code };
   });
 
 // ─── Update plan key ─────────────────────────────────────────────────────────
@@ -509,13 +517,22 @@ export const superadminUpdatePlanKey = createServerFn({ method: "POST" })
       keyId: z.string().uuid(),
       planType: z.enum(KEY_PLAN_TYPES),
       label: z.string().trim().optional(),
+      isPromo: z.boolean().optional(),
+      maxUses: z.number().int().min(1).nullable().optional(),
+      expiresAt: z.string().nullable().optional(),
     }).parse(d),
   )
   .handler(async ({ data }) => {
     const admin = await verifySuperadmin(data.accessToken);
     const { error } = await (supabaseAdmin as any)
       .from("plan_keys")
-      .update({ plan_type: data.planType, label: data.label ?? null })
+      .update({
+        plan_type: data.planType,
+        label: data.label ?? null,
+        is_promo: data.isPromo ?? false,
+        max_uses: data.maxUses ?? null,
+        expires_at: data.expiresAt ?? null,
+      })
       .eq("id", data.keyId);
     if (error) throw new Error(error.message);
     await auditLog(admin.id, "SUPERADMIN_UPDATE_KEY", null, { key_id: data.keyId, plan_type: data.planType });

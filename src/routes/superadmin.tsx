@@ -98,6 +98,10 @@ type PlanKey = {
   code: string;
   planType: string;
   label: string | null;
+  isPromo: boolean;
+  maxUses: number | null;
+  usesCount: number;
+  expiresAt: string | null;
   used: boolean;
   usedAt: string | null;
   usedByOrgName: string | null;
@@ -1181,17 +1185,16 @@ function DeleteUserModal({
   );
 }
 
-// ─── Plan-nøgler tab ──────────────────────────────────────────────────────────
+// ─── Aktiveringsnøgler tab ────────────────────────────────────────────────────
 
 function KeysTab({ accessToken }: { accessToken: string }) {
   const [keys, setKeys] = useState<PlanKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newPlanType, setNewPlanType] = useState<(typeof KEY_PLAN_TYPES)[number]>("pro");
-  const [newLabel, setNewLabel] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<PlanKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PlanKey | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [soeg, setSoeg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1201,23 +1204,6 @@ function KeysTab({ accessToken }: { accessToken: string }) {
   }, [accessToken]);
 
   useEffect(() => { load(); }, [load]);
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      const result = await superadminGeneratePlanKey({ data: { accessToken, planType: newPlanType } });
-      const code = (result as any).code as string;
-      if (newLabel.trim()) {
-        const r = keys.find(() => false); // placeholder — we update after reload
-        await superadminUpdatePlanKey({ data: { accessToken, keyId: (result as any).id ?? "", planType: newPlanType, label: newLabel.trim() } }).catch(() => {});
-      }
-      await navigator.clipboard.writeText(code).catch(() => {});
-      toast.success(`Nøgle genereret og kopieret: ${code}`, { duration: 8000 });
-      setNewLabel("");
-      load();
-    } catch (err: any) { toast.error(err?.message ?? "Kunne ikke generere nøgle"); }
-    finally { setGenerating(false); }
-  };
 
   const copyCode = async (key: PlanKey) => {
     await navigator.clipboard.writeText(key.code).catch(() => {});
@@ -1234,33 +1220,64 @@ function KeysTab({ accessToken }: { accessToken: string }) {
     } catch (err: any) { toast.error(err?.message ?? "Kunne ikke slette nøgle"); }
   };
 
-  const unused = keys.filter((k) => !k.used).length;
+  const promoKeys = keys.filter((k) => k.isPromo);
+  const singleKeys = keys.filter((k) => !k.isPromo);
+  const activePromo = promoKeys.filter((k) => {
+    const notExpired = !k.expiresAt || new Date(k.expiresAt) > new Date();
+    const notExhausted = k.maxUses === null || k.usesCount < k.maxUses;
+    return notExpired && notExhausted;
+  }).length;
+  const unusedSingle = singleKeys.filter((k) => !k.used).length;
+
+  const filtrede = soeg
+    ? keys.filter((k) =>
+        k.code.includes(soeg.toUpperCase()) ||
+        (k.label ?? "").toLowerCase().includes(soeg.toLowerCase()) ||
+        (k.usedByOrgName ?? "").toLowerCase().includes(soeg.toLowerCase())
+      )
+    : keys;
+
+  const keyStatus = (k: PlanKey) => {
+    if (k.isPromo) {
+      const expired = k.expiresAt && new Date(k.expiresAt) < new Date();
+      const exhausted = k.maxUses !== null && k.usesCount >= k.maxUses;
+      if (expired) return { label: "Udløbet", cls: "bg-destructive/15 text-destructive" };
+      if (exhausted) return { label: "Opbrugt", cls: "bg-muted text-muted-foreground" };
+      return { label: "Aktiv", cls: "bg-success/15 text-success" };
+    }
+    return k.used
+      ? { label: "Brugt", cls: "bg-muted text-muted-foreground" }
+      : { label: "Ubrugt", cls: "bg-success/15 text-success" };
+  };
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-xl font-bold">Aktiveringsnøgler</h2>
-        <p className="text-sm text-muted-foreground">{keys.length} nøgler totalt · {unused} ubrugte</p>
-      </div>
-
-      <div className="glass rounded-2xl p-5">
-        <p className="mb-3 text-sm font-medium">Generer ny aktiveringsnøgle</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <select value={newPlanType} onChange={(e) => setNewPlanType(e.target.value as any)} className="rounded-xl border border-input bg-background px-3 py-2 text-sm">
-            {KEY_PLAN_TYPES.map((t) => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
-          </select>
-          <input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Label (valgfrit)"
-            className="rounded-xl border border-input bg-background px-3 py-2 text-sm w-48"
-          />
-          <button onClick={handleGenerate} disabled={generating}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50">
-            <Plus className="h-4 w-4" /> {generating ? "Genererer…" : "Generer nøgle"}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">Aktiveringsnøgler</h2>
+          <p className="text-sm text-muted-foreground">
+            {singleKeys.length} engangskoder ({unusedSingle} ubrugte) · {promoKeys.length} kampagnekoder ({activePromo} aktive)
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={load} className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Opdater
+          </button>
+          <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow">
+            <Plus className="h-4 w-4" /> Ny nøgle
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Koden kopieres automatisk til udklipsholderen.</p>
+      </div>
+
+      <div className="rounded-xl border border-border/50 bg-surface/30 p-3 text-xs text-muted-foreground">
+        <strong>Engangskoder</strong> aktiverer en plan for én organisation. <strong>Kampagnekoder</strong> kan indløses af mange organisationer og er ideelle til promo-kampagner.
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input type="search" value={soeg} onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg kode, label eller organisation…"
+          className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm focus:border-ring focus:outline-none" />
       </div>
 
       <div className="glass overflow-hidden rounded-2xl">
@@ -1271,55 +1288,83 @@ function KeysTab({ accessToken }: { accessToken: string }) {
                 <th className="px-4 py-3 text-left">Kode</th>
                 <th className="px-4 py-3 text-left">Label</th>
                 <th className="px-4 py-3 text-left">Plan</th>
+                <th className="px-4 py-3 text-left">Type</th>
+                <th className="px-4 py-3 text-left">Brug</th>
                 <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Brugt af</th>
+                <th className="px-4 py-3 text-left">Udløb</th>
                 <th className="px-4 py-3 text-left">Oprettet</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Indlæser…</td></tr>
-              ) : keys.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Ingen nøgler endnu</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Indlæser…</td></tr>
+              ) : filtrede.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
+                  <Key className="mx-auto mb-3 h-8 w-8 opacity-30" />
+                  {soeg ? "Ingen nøgler matcher søgningen" : "Ingen nøgler endnu. Klik \"Ny nøgle\" for at oprette."}
+                </td></tr>
               ) : (
-                keys.map((k, i) => (
-                  <tr key={k.id} className={`border-b border-border/50 transition ${i % 2 ? "bg-surface/20" : ""} ${!k.used ? "hover:bg-surface/40" : "opacity-60"}`}>
-                    <td className="px-4 py-3"><span className="font-mono text-xs tracking-widest">{k.code}</span></td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{k.label ?? "–"}</td>
-                    <td className="px-4 py-3"><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{TIER_LABELS[k.planType] ?? k.planType}</span></td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${k.used ? "bg-muted text-muted-foreground" : "bg-success/15 text-success"}`}>
-                        {k.used ? "Brugt" : "Ubrugt"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {k.usedByOrgName ? `${k.usedByOrgName}${k.usedAt ? ` · ${fmtDato(k.usedAt)}` : ""}` : "–"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{fmtDato(k.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {!k.used && (
-                          <button onClick={() => copyCode(k)} title="Kopiér" className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
-                            {copiedId === k.id ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                filtrede.map((k, i) => {
+                  const st = keyStatus(k);
+                  return (
+                    <tr key={k.id} className={`border-b border-border/50 transition hover:bg-surface/40 ${i % 2 ? "bg-surface/20" : ""}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs tracking-widest">{k.code}</span>
+                          <button onClick={() => copyCode(k)} className="rounded p-0.5 text-muted-foreground hover:text-foreground">
+                            {copiedId === k.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                           </button>
-                        )}
-                        <button onClick={() => setEditTarget(k)} title="Rediger" className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => setDeleteTarget(k)} title="Slet" className="rounded-lg p-1.5 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{k.label ?? <span className="italic">–</span>}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          {TIER_LABELS[k.planType] ?? k.planType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${k.isPromo ? "bg-violet-500/15 text-violet-600" : "bg-surface text-muted-foreground border border-border"}`}>
+                          {k.isPromo ? "Kampagne" : "Engangskode"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {k.isPromo
+                          ? `${k.usesCount}${k.maxUses !== null ? ` / ${k.maxUses}` : ""} indløsninger`
+                          : k.usedByOrgName ? `${k.usedByOrgName}${k.usedAt ? ` · ${fmtDato(k.usedAt)}` : ""}` : "–"
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {k.expiresAt ? fmtDato(k.expiresAt) : "–"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{fmtDato(k.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setEditTarget(k)} className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-surface-elevated">Rediger</button>
+                          <button onClick={() => setDeleteTarget(k)} className="rounded-lg p-1.5 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
+      {showCreate && (
+        <PlanKeyModal
+          accessToken={accessToken}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { setShowCreate(false); load(); }}
+        />
+      )}
       {editTarget && (
         <PlanKeyModal
           accessToken={accessToken}
@@ -1328,15 +1373,14 @@ function KeysTab({ accessToken }: { accessToken: string }) {
           onSaved={() => { setEditTarget(null); load(); }}
         />
       )}
-
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="glass w-full max-w-sm rounded-3xl p-6 shadow-card">
             <h3 className="font-display text-lg font-bold">Slet nøgle?</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              <span className="font-mono">{deleteTarget.code}</span>
-              {deleteTarget.used && <span className="ml-2 text-warning">(allerede brugt)</span>}
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground font-mono">{deleteTarget.code}</p>
+            {deleteTarget.isPromo && deleteTarget.usesCount > 0 && (
+              <p className="mt-1 text-xs text-warning">Denne kampagnekode er brugt {deleteTarget.usesCount} gang(e).</p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setDeleteTarget(null)} className="rounded-xl border border-border bg-surface px-4 py-2 text-sm">Annuller</button>
               <button onClick={() => handleDelete(deleteTarget)} className="rounded-xl bg-destructive px-4 py-2 text-sm font-semibold text-white">Slet</button>
@@ -1350,55 +1394,155 @@ function KeysTab({ accessToken }: { accessToken: string }) {
 
 function PlanKeyModal({ accessToken, planKey, onClose, onSaved }: {
   accessToken: string;
-  planKey: PlanKey;
+  planKey?: PlanKey;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isEdit = !!planKey;
   const [planType, setPlanType] = useState<(typeof KEY_PLAN_TYPES)[number]>(
-    (KEY_PLAN_TYPES as readonly string[]).includes(planKey.planType)
+    isEdit && (KEY_PLAN_TYPES as readonly string[]).includes(planKey.planType)
       ? planKey.planType as (typeof KEY_PLAN_TYPES)[number]
       : "pro"
   );
-  const [label, setLabel] = useState(planKey.label ?? "");
+  const [label, setLabel] = useState(planKey?.label ?? "");
+  const [isPromo, setIsPromo] = useState(planKey?.isPromo ?? false);
+  const [maxUses, setMaxUses] = useState<string>(planKey?.maxUses?.toString() ?? "");
+  const [expiresAt, setExpiresAt] = useState(planKey?.expiresAt?.slice(0, 10) ?? "");
   const [saving, setSaving] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [copiedGenerated, setCopiedGenerated] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await superadminUpdatePlanKey({ data: { accessToken, keyId: planKey.id, planType, label: label.trim() || undefined } });
-      toast.success("Nøgle opdateret");
-      onSaved();
+      const maxUsesNum = maxUses.trim() ? parseInt(maxUses, 10) : null;
+      const expiresAtVal = expiresAt ? new Date(expiresAt).toISOString() : null;
+
+      if (isEdit && planKey) {
+        await superadminUpdatePlanKey({
+          data: {
+            accessToken,
+            keyId: planKey.id,
+            planType,
+            label: label.trim() || undefined,
+            isPromo,
+            maxUses: isPromo ? maxUsesNum : null,
+            expiresAt: isPromo ? expiresAtVal : null,
+          },
+        });
+        toast.success("Nøgle opdateret");
+        onSaved();
+      } else {
+        const result = await superadminGeneratePlanKey({
+          data: {
+            accessToken,
+            planType,
+            label: label.trim() || undefined,
+            isPromo,
+            maxUses: isPromo ? maxUsesNum : null,
+            expiresAt: isPromo ? expiresAtVal : null,
+          },
+        });
+        const code = (result as any).code as string;
+        await navigator.clipboard.writeText(code).catch(() => {});
+        setGeneratedCode(code);
+      }
     } catch (err: any) {
-      toast.error(err?.message ?? "Kunne ikke opdatere nøgle");
+      toast.error(err?.message ?? "Ukendt fejl");
     } finally {
       setSaving(false);
     }
   };
 
+  const copyGenerated = async () => {
+    if (!generatedCode) return;
+    await navigator.clipboard.writeText(generatedCode).catch(() => {});
+    setCopiedGenerated(true);
+    setTimeout(() => setCopiedGenerated(false), 2000);
+  };
+
+  if (generatedCode) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="glass w-full max-w-sm rounded-3xl p-6 shadow-card text-center">
+          <div className="mb-3 text-4xl">🎉</div>
+          <h3 className="font-display text-lg font-bold">Nøgle oprettet</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{isPromo ? "Kampagnekode" : "Engangskode"} · {TIER_LABELS[planType]}</p>
+          <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-border bg-surface p-3">
+            <span className="font-mono text-lg tracking-widest font-semibold">{generatedCode}</span>
+            <button onClick={copyGenerated} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground">
+              {copiedGenerated ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Koden er kopieret til udklipsholderen.</p>
+          <button onClick={onSaved} className="mt-5 w-full rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground">
+            Luk
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="glass w-full max-w-sm rounded-3xl p-6 shadow-card">
-        <h3 className="font-display text-lg font-bold">Rediger nøgle</h3>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">{planKey.code}</p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Plan</label>
-            <select value={planType} onChange={(e) => setPlanType(e.target.value as any)}
-              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
-              {KEY_PLAN_TYPES.map((t) => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
-            </select>
+      <div className="glass w-full max-w-md rounded-3xl p-6 shadow-card">
+        <h3 className="font-display text-lg font-bold">{isEdit ? "Rediger nøgle" : "Ny aktiveringsnøgle"}</h3>
+        {isEdit && <p className="mt-1 font-mono text-xs text-muted-foreground">{planKey.code}</p>}
+
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Plan</label>
+              <select value={planType} onChange={(e) => setPlanType(e.target.value as any)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
+                {KEY_PLAN_TYPES.map((t) => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Label</label>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="F.eks. Black Friday…"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+            </div>
           </div>
+
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Label</label>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="F.eks. kampagne, partner..."
-              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+            <label className="mb-2 block text-xs font-medium text-muted-foreground">Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setIsPromo(false)}
+                className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${!isPromo ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted-foreground hover:bg-surface-elevated"}`}>
+                <div className="font-semibold">Engangskode</div>
+                <div className="mt-0.5 text-xs opacity-70">Bruges én gang af én organisation</div>
+              </button>
+              <button type="button" onClick={() => setIsPromo(true)}
+                className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${isPromo ? "border-violet-500 bg-violet-500/10 text-violet-600" : "border-border bg-surface text-muted-foreground hover:bg-surface-elevated"}`}>
+                <div className="font-semibold">Kampagnekode</div>
+                <div className="mt-0.5 text-xs opacity-70">Kan bruges af mange organisationer</div>
+              </button>
+            </div>
           </div>
+
+          {isPromo && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Maks. indløsninger</label>
+                <input type="number" min="1" value={maxUses} onChange={(e) => setMaxUses(e.target.value)}
+                  placeholder="Ubegrænset"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Udløbsdato</label>
+                <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm" />
+              </div>
+            </div>
+          )}
         </div>
+
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-xl border border-border bg-surface px-4 py-2 text-sm">Annuller</button>
           <button onClick={handleSave} disabled={saving}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-            <Save className="h-4 w-4" /> {saving ? "Gemmer…" : "Gem"}
+            <Save className="h-4 w-4" /> {saving ? "Gemmer…" : isEdit ? "Gem" : "Generer"}
           </button>
         </div>
       </div>
