@@ -6,30 +6,18 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 const FORBIDDEN = "Ingen adgang.";
 
 async function verifySuperadmin(accessToken: string): Promise<{ id: string }> {
-  // Decode JWT (Supabase signs it — sub is the user UUID)
-  const parts = accessToken.split(".");
-  if (parts.length !== 3) throw new Error(FORBIDDEN);
-  let userId: string;
-  try {
-    const raw = Buffer.from(parts[1], "base64").toString("utf-8");
-    const payload = JSON.parse(raw);
-    if (!payload?.sub) throw new Error("no sub");
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload.exp === "number" && payload.exp < now) throw new Error("expired");
-    userId = payload.sub as string;
-  } catch {
-    throw new Error(FORBIDDEN);
-  }
+  const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(accessToken);
+  if (authErr || !user) throw new Error(FORBIDDEN);
 
   const { data: profile, error } = await supabaseAdmin
     .from("profiles")
     .select("role")
-    .eq("id", userId)
+    .eq("id", user.id)
     .single();
 
   if (error) throw new Error(`DB: ${error.message}`);
   if ((profile as any)?.role !== "superadmin") throw new Error(FORBIDDEN);
-  return { id: userId };
+  return { id: user.id };
 }
 
 // Silent audit — never throws, so a missing column won't break a panel action.
