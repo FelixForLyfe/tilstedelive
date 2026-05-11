@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Users, Lock, Send, Trash2, X, AlertTriangle, CalendarDays, ArrowLeftRight, UserX, Clock as ClockIcon, LayoutGrid } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus, Users, Lock, Send, Trash2, X, AlertTriangle, CalendarDays, ArrowLeftRight, UserX, Clock as ClockIcon, LayoutGrid, Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
@@ -604,7 +604,7 @@ function ShiftModal({
   );
 }
 
-type VagtTab = "plan" | "aabne" | "bytte" | "fravaer" | "timebank" | "tilgaengelighed";
+type VagtTab = "plan" | "maaned" | "aabne" | "bytte" | "fravaer" | "timebank" | "tilgaengelighed";
 
 function VagtplanSide() {
   const { aktivOrgId, erAdmin } = useOrg();
@@ -708,7 +708,8 @@ function VagtplanSide() {
   const today = toISODate(new Date());
 
   const vagtTabs: { id: VagtTab; label: string; icon: any }[] = [
-    { id: "plan", label: "Ugeoversigt", icon: LayoutGrid },
+    { id: "plan", label: "Uge", icon: LayoutGrid },
+    { id: "maaned", label: "Måned", icon: Calendar },
     { id: "aabne", label: "Åbne vagter", icon: Users },
     { id: "bytte", label: "Vagtbytte", icon: ArrowLeftRight },
     { id: "fravaer", label: "Fravær", icon: UserX },
@@ -740,6 +741,17 @@ function VagtplanSide() {
       </div>
 
       {/* Non-schedule tabs */}
+      {aktivOrgId && activeTab === "maaned" && (
+        <MonthViewTab
+          orgId={aktivOrgId}
+          erAdmin={erAdmin}
+          templates={templates}
+          members={members}
+          settings={settings}
+          onEditShift={(s) => setModalShift(s)}
+          onCreateShift={(date) => { setModalDate(date); setModalShift(null); }}
+        />
+      )}
       {aktivOrgId && activeTab === "aabne" && <AabneVagterTab orgId={aktivOrgId} />}
       {aktivOrgId && activeTab === "bytte" && <VagtbytteTab orgId={aktivOrgId} erAdmin={erAdmin} />}
       {aktivOrgId && activeTab === "fravaer" && <FravaerTab orgId={aktivOrgId} erAdmin={erAdmin} />}
@@ -1616,6 +1628,216 @@ function TimebankTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ===== MÅNEDSOVERSIGT =====
+function MonthViewTab({
+  orgId,
+  erAdmin,
+  onEditShift,
+  onCreateShift,
+}: {
+  orgId: string;
+  erAdmin: boolean;
+  templates: ShiftTemplate[];
+  members: OrgMember[];
+  settings: VagtSettings;
+  onEditShift: (s: Shift) => void;
+  onCreateShift: (date: string) => void;
+}) {
+  const [monthDate, setMonthDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id ?? null));
+  }, []);
+
+  const gridStart = useMemo(() => {
+    const d = new Date(monthDate);
+    d.setDate(1);
+    return getWeekStart(d);
+  }, [monthDate]);
+
+  const gridEnd = useMemo(() => addDays(gridStart, 41), [gridStart]);
+
+  const gridDates = useMemo(
+    () => Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)),
+    [gridStart],
+  );
+
+  const loadMonthShifts = useCallback(async () => {
+    setLoading(true);
+    const { data } = await (supabase as any)
+      .from("shifts")
+      .select("*,shift_assignments(user_id,status,profiles(full_name))")
+      .eq("organization_id", orgId)
+      .gte("date", toISODate(gridStart))
+      .lte("date", toISODate(gridEnd))
+      .order("start_time");
+    setShifts(data ?? []);
+    setLoading(false);
+  }, [orgId, gridStart, gridEnd]);
+
+  useEffect(() => { loadMonthShifts(); }, [loadMonthShifts]);
+
+  useEffect(() => {
+    const ch = supabase.channel(`month-view-${orgId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shifts", filter: `organization_id=eq.${orgId}` },
+        () => loadMonthShifts())
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "shift_assignments", filter: `organization_id=eq.${orgId}` },
+        () => loadMonthShifts())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orgId, loadMonthShifts]);
+
+  const prevMonth = () => setMonthDate((d) => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; });
+  const nextMonth = () => setMonthDate((d) => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; });
+  const goToday = () => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    setMonthDate(d);
+  };
+
+  const today = toISODate(new Date());
+  const currentMonth = monthDate.getMonth();
+
+  const shiftsForDate = (dateStr: string) => {
+    const all = shifts.filter((s) => s.date === dateStr);
+    if (erAdmin) return all;
+    return all.filter((s) => {
+      const isAssigned = s.shift_assignments?.some((a) => a.user_id === userId);
+      const isOpenPublished = s.is_open && s.status === "published";
+      return isAssigned || isOpenPublished;
+    });
+  };
+
+  const rawLabel = monthDate.toLocaleDateString("da-DK", { month: "long", year: "numeric" });
+  const monthLabel = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-lg">{monthLabel}</h2>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={prevMonth}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border hover:bg-muted"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={goToday}
+            className="rounded-xl border border-border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            I dag
+          </button>
+          <button
+            onClick={nextMonth}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border hover:bg-muted"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="glass rounded-2xl overflow-hidden">
+        {/* Day-of-week headers */}
+        <div className="grid grid-cols-7 border-b border-border bg-muted/30">
+          {DAY_SHORT.map((d) => (
+            <div key={d} className="py-2 text-center text-xs font-medium text-muted-foreground">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* 6-week grid */}
+        {Array.from({ length: 6 }, (_, week) => (
+          <div key={week} className="grid grid-cols-7 border-b border-border last:border-0">
+            {Array.from({ length: 7 }, (_, dow) => {
+              const date = gridDates[week * 7 + dow];
+              const dateStr = toISODate(date);
+              const isToday = dateStr === today;
+              const inMonth = date.getMonth() === currentMonth;
+              const dayShifts = shiftsForDate(dateStr);
+
+              return (
+                <div
+                  key={dateStr}
+                  className={`relative min-h-[90px] border-r border-border last:border-r-0 p-1.5 ${
+                    !inMonth ? "bg-muted/20" : ""
+                  } ${erAdmin && inMonth ? "cursor-pointer hover:bg-primary/5 transition" : ""}`}
+                  onClick={() => {
+                    if (erAdmin && inMonth) onCreateShift(dateStr);
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                        isToday
+                          ? "bg-primary text-primary-foreground"
+                          : inMonth
+                          ? "text-foreground"
+                          : "text-muted-foreground/40"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                    {erAdmin && inMonth && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onCreateShift(dateStr); }}
+                        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-0.5">
+                    {dayShifts.slice(0, 3).map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={(e) => { e.stopPropagation(); onEditShift(s); }}
+                        className={`w-full rounded text-left px-1.5 py-0.5 text-[10px] leading-snug truncate transition hover:opacity-75 ${
+                          s.status === "cancelled" ? "opacity-40 line-through" : ""
+                        }`}
+                        style={{
+                          backgroundColor: `${s.color}25`,
+                          borderLeft: `2px solid ${s.color}`,
+                          color: s.color,
+                        }}
+                        title={`${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}${s.role ? ` · ${s.role}` : ""}`}
+                      >
+                        {s.start_time.slice(0, 5)} {s.role ?? "Vagt"}
+                      </button>
+                    ))}
+                    {dayShifts.length > 3 && (
+                      <p className="text-[10px] text-muted-foreground px-1">
+                        +{dayShifts.length - 3} mere
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {loading && (
+        <p className="text-center text-xs text-muted-foreground">Indlæser…</p>
       )}
     </div>
   );
