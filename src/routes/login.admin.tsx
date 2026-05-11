@@ -85,7 +85,7 @@ function AdminLogin() {
           <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
             <p>
               Ingen organisation endnu?{" "}
-              <Link to="/signup" className="font-semibold text-primary hover:underline">Opret en</Link>
+              <Link to="/signup" search={{ plan: undefined }} className="font-semibold text-primary hover:underline">Opret en</Link>
             </p>
             <p>
               Er du personale?{" "}

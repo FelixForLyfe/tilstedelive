@@ -214,6 +214,7 @@ function PriserSide() {
           ) : (
             <Link
               to="/signup"
+              search={{ plan: undefined }}
               className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
             >
               Opret gratis
@@ -322,6 +323,7 @@ function PriserSide() {
           </p>
           <Link
             to="/signup"
+            search={{ plan: undefined }}
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
           >
             Start 7 dages gratis prøveperiode <ChevronRight className="h-4 w-4" />

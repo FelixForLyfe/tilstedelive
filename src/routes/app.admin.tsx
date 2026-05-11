@@ -596,7 +596,7 @@ function AuditLogPanel({ orgId }: { orgId: string }) {
 
   const indlaes = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("audit_logs")
       .select("id, created_at, action, table_name, record_id, changed_fields, user_id")
       .eq("org_id", orgId)
@@ -609,7 +609,7 @@ function AuditLogPanel({ orgId }: { orgId: string }) {
     setLogs(entries);
 
     // Fetch profiles for unique user_ids
-    const userIds = [...new Set(entries.map((e: any) => e.user_id).filter(Boolean))];
+    const userIds = [...new Set(entries.map((e: any) => e.user_id).filter(Boolean))] as string[];
     if (userIds.length > 0) {
       const { data: profs } = await supabase
         .from("profiles")

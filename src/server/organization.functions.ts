@@ -81,7 +81,7 @@ export const createOrganizationAdmin = createServerFn({ method: "POST" })
         throw new Error(GENERIC_ERR);
       }
 
-      const { data: org, error: orgError } = await supabaseAdmin
+      const { data: org, error: orgError } = await (supabaseAdmin as any)
         .from("organizations")
         .insert({
           name: data.orgName,

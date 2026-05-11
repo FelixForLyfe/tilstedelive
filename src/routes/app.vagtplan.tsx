@@ -326,18 +326,19 @@ function ShiftModal({
   // Compliance warnings
   useEffect(() => {
     const w: string[] = [];
-    const startH = parseInt(form.start_time.split(":")[0]);
-    const endH = parseInt(form.end_time.split(":")[0]);
-    const shiftHours = endH - startH;
-    if (shiftHours > settings.max_weekly_hours) {
-      w.push(`Vagten er på ${shiftHours} timer — overstiger max ${settings.max_weekly_hours} timer/uge.`);
+    const [startH, startM] = form.start_time.split(":").map(Number);
+    const [endH, endM] = form.end_time.split(":").map(Number);
+    const shiftMins = (endH * 60 + endM) - (startH * 60 + startM);
+    const shiftHours = shiftMins / 60;
+    if (shiftMins > 0 && shiftHours > 12) {
+      w.push(`Vagten er på ${shiftHours.toFixed(1)} timer — ekstra lang vagt.`);
     }
     const d = new Date(form.date).getDay();
     if (d === 0 || d === 6) {
       w.push("Weekend-vagt — husk weekendtillæg.");
     }
     setWarnings(w);
-  }, [form.start_time, form.end_time, form.date, settings]);
+  }, [form.start_time, form.end_time, form.date]);
 
   const toggleAssign = (userId: string) => {
     setAssignedUsers((prev) =>
@@ -346,6 +347,8 @@ function ShiftModal({
   };
 
   const submit = async () => {
+    if (!form.date) return toast.error("Dato er påkrævet.");
+    if (form.start_time >= form.end_time) return toast.error("Sluttid skal være efter starttid.");
     setSaving(true);
     try {
       const payload = {
@@ -379,23 +382,26 @@ function ShiftModal({
         const toRemove = existing.filter((u) => !assignedUsers.includes(u));
 
         if (toAdd.length > 0) {
-          await (supabase as any).from("shift_assignments").insert(
+          const { error: addErr } = await (supabase as any).from("shift_assignments").insert(
             toAdd.map((u) => ({ shift_id: shiftId, user_id: u, organization_id: orgId, status: "assigned" }))
           );
+          if (addErr) throw addErr;
         }
         if (toRemove.length > 0) {
-          await (supabase as any).from("shift_assignments")
+          const { error: removeErr } = await (supabase as any)
+            .from("shift_assignments")
             .delete()
             .eq("shift_id", shiftId)
             .in("user_id", toRemove);
+          if (removeErr) throw removeErr;
         }
       }
 
       toast.success(isEdit ? "Vagt opdateret." : "Vagt oprettet.");
       onSaved();
       onClose();
-    } catch {
-      toast.error("Kunne ikke gemme vagten.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme vagten.");
     } finally {
       setSaving(false);
     }
@@ -627,13 +633,14 @@ function VagtplanSide() {
   const loadShifts = useCallback(async () => {
     if (!aktivOrgId) return;
     setLoading(true);
-    const { data } = await (supabase as any)
+    const { data, error } = await (supabase as any)
       .from("shifts")
       .select("*,shift_assignments(user_id,status,profiles(full_name))")
       .eq("organization_id", aktivOrgId)
       .gte("date", toISODate(weekStart))
       .lte("date", toISODate(weekEnd))
       .order("start_time");
+    if (error) toast.error("Kunne ikke hente vagter.");
     setShifts(data ?? []);
     setLoading(false);
   }, [aktivOrgId, weekStart]);

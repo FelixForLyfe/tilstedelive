@@ -45,7 +45,7 @@ function LoginVaelg() {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Ingen konto?{" "}
-            <Link to="/signup" className="font-semibold text-primary hover:underline">Opret organisation</Link>
+            <Link to="/signup" search={{ plan: undefined }} className="font-semibold text-primary hover:underline">Opret organisation</Link>
           </p>
         </div>
       </div>
