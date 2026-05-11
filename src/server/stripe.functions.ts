@@ -12,7 +12,7 @@ const PRICE_IDS: Record<string, string | undefined> = {
 function getStripe(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("STRIPE_SECRET_KEY er ikke konfigureret.");
-  return new Stripe(key, { apiVersion: "2025-04-30.basil" });
+  return new Stripe(key, { apiVersion: "2026-04-22.dahlia" });
 }
 
 export const createCheckoutSession = createServerFn({ method: "POST" })
@@ -79,6 +79,9 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: data.successUrl,
       cancel_url: data.cancelUrl,
+      // org_id in both places: session.metadata (for checkout.session.completed)
+      // and subscription metadata (for subscription.updated/deleted)
+      metadata: { org_id: data.orgId },
       subscription_data: {
         metadata: { org_id: data.orgId },
       },

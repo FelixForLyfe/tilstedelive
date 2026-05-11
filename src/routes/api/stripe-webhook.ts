@@ -11,8 +11,15 @@ const PRICE_TO_TIER: Record<string, Tier> = {
 };
 
 function resolveTier(sub: Stripe.Subscription): Tier {
-  const priceId = (sub.items.data[0]?.price as Stripe.Price)?.id ?? "";
+  const priceId = sub.items.data[0]?.price?.id ?? "";
   return PRICE_TO_TIER[priceId] ?? "basis";
+}
+
+function stripeStatus(status: Stripe.Subscription.Status): "active" | "past_due" | "canceled" | "trialing" {
+  if (status === "active") return "active";
+  if (status === "past_due") return "past_due";
+  if (status === "trialing") return "trialing";
+  return "canceled";
 }
 
 export const APIRoute = createAPIFileRoute("/api/stripe-webhook")({
@@ -24,7 +31,7 @@ export const APIRoute = createAPIFileRoute("/api/stripe-webhook")({
       return new Response("Stripe not configured", { status: 500 });
     }
 
-    const stripe = new Stripe(secret, { apiVersion: "2025-04-30.basil" });
+    const stripe = new Stripe(secret, { apiVersion: "2026-04-22.dahlia" });
     const sig = request.headers.get("stripe-signature");
     if (!sig) return new Response("Missing signature", { status: 400 });
 
@@ -43,9 +50,12 @@ export const APIRoute = createAPIFileRoute("/api/stripe-webhook")({
           const session = event.data.object as Stripe.Checkout.Session;
           if (session.mode !== "subscription") break;
 
-          const orgId = session.subscription_data?.metadata?.org_id
-            ?? (session.metadata as Record<string, string>)?.org_id;
-          if (!orgId) break;
+          // org_id is set in session.metadata at checkout session creation
+          const orgId = session.metadata?.org_id;
+          if (!orgId) {
+            console.error("[stripe-webhook] checkout.session.completed: missing org_id in metadata");
+            break;
+          }
 
           const sub = await stripe.subscriptions.retrieve(session.subscription as string, {
             expand: ["items.data.price"],
@@ -54,9 +64,10 @@ export const APIRoute = createAPIFileRoute("/api/stripe-webhook")({
           await supabaseAdmin
             .from("organizations")
             .update({
+              stripe_customer_id: session.customer as string,
               stripe_subscription_id: sub.id,
               subscription_tier: resolveTier(sub),
-              subscription_status: sub.status === "active" ? "active" : "trialing",
+              subscription_status: stripeStatus(sub.status),
             })
             .eq("id", orgId);
           break;
@@ -67,17 +78,11 @@ export const APIRoute = createAPIFileRoute("/api/stripe-webhook")({
           const orgId = sub.metadata?.org_id;
           if (!orgId) break;
 
-          const status =
-            sub.status === "active" ? "active"
-            : sub.status === "past_due" ? "past_due"
-            : sub.status === "trialing" ? "trialing"
-            : "canceled";
-
           await supabaseAdmin
             .from("organizations")
             .update({
-              subscription_tier: resolveTier(sub as any),
-              subscription_status: status,
+              subscription_tier: resolveTier(sub),
+              subscription_status: stripeStatus(sub.status),
             })
             .eq("id", orgId);
           break;

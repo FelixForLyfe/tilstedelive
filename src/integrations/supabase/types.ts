@@ -520,6 +520,10 @@ export type Database = {
           id: string
           name: string
           updated_at: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_tier: 'gratis' | 'basis' | 'pro' | 'organisation'
+          subscription_status: 'active' | 'past_due' | 'canceled' | 'trialing'
         }
         Insert: {
           created_at?: string
@@ -527,6 +531,10 @@ export type Database = {
           id?: string
           name: string
           updated_at?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_tier?: 'gratis' | 'basis' | 'pro' | 'organisation'
+          subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing'
         }
         Update: {
           created_at?: string
@@ -534,6 +542,10 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_tier?: 'gratis' | 'basis' | 'pro' | 'organisation'
+          subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing'
         }
         Relationships: []
       }
