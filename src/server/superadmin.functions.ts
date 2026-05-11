@@ -632,6 +632,7 @@ export type CustomPlan = {
   name: string;
   price_dkk: number;
   description: string | null;
+  stripe_price_id: string | null;
   start_date: string;
   end_date: string | null;
   status: string;
@@ -647,7 +648,7 @@ export const superadminListCustomPlans = createServerFn({ method: "POST" })
 
     const { data: plans, error } = await (supabaseAdmin as any)
       .from("custom_plans")
-      .select("id, organization_id, name, price_dkk, description, start_date, end_date, status, created_at, organizations(name)")
+      .select("id, organization_id, name, price_dkk, description, stripe_price_id, start_date, end_date, status, created_at, organizations(name)")
       .order("created_at", { ascending: false });
 
     if (error && isMissingTable(error)) return [] as CustomPlan[];
@@ -660,6 +661,7 @@ export const superadminListCustomPlans = createServerFn({ method: "POST" })
       name: p.name as string,
       price_dkk: p.price_dkk as number,
       description: (p.description ?? null) as string | null,
+      stripe_price_id: (p.stripe_price_id ?? null) as string | null,
       start_date: p.start_date as string,
       end_date: (p.end_date ?? null) as string | null,
       status: p.status as string,
@@ -676,6 +678,7 @@ export const superadminCreateCustomPlan = createServerFn({ method: "POST" })
         name: z.string().trim().min(1, "Plannavn er påkrævet"),
         price_dkk: z.number().int().min(0),
         description: z.string().trim().optional(),
+        stripe_price_id: z.string().trim().optional(),
         start_date: z.string().min(1, "Startdato er påkrævet"),
         end_date: z.string().nullable().optional(),
         status: z.enum(CUSTOM_PLAN_STATUSES).default("active"),
@@ -690,6 +693,7 @@ export const superadminCreateCustomPlan = createServerFn({ method: "POST" })
       name: data.name,
       price_dkk: data.price_dkk,
       description: data.description ?? null,
+      stripe_price_id: data.stripe_price_id?.trim() || null,
       start_date: data.start_date,
       end_date: data.end_date ?? null,
       status: data.status,
@@ -716,6 +720,7 @@ export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
         name: z.string().trim().min(1),
         price_dkk: z.number().int().min(0),
         description: z.string().trim().optional(),
+        stripe_price_id: z.string().trim().optional(),
         start_date: z.string().min(1),
         end_date: z.string().nullable().optional(),
         status: z.enum(CUSTOM_PLAN_STATUSES),
@@ -731,6 +736,7 @@ export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
         name: data.name,
         price_dkk: data.price_dkk,
         description: data.description ?? null,
+        stripe_price_id: data.stripe_price_id?.trim() || null,
         start_date: data.start_date,
         end_date: data.end_date ?? null,
         status: data.status,

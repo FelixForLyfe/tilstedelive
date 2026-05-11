@@ -1810,6 +1810,7 @@ function CustomPlanModal({
   const [name, setName] = useState(plan?.name ?? "");
   const [priceDkk, setPriceDkk] = useState(plan?.price_dkk ?? 0);
   const [description, setDescription] = useState(plan?.description ?? "");
+  const [stripePriceId, setStripePriceId] = useState(plan?.stripe_price_id ?? "");
   const [startDate, setStartDate] = useState(plan?.start_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(plan?.end_date?.slice(0, 10) ?? "");
   const [status, setStatus] = useState(plan?.status ?? "active");
@@ -1838,6 +1839,7 @@ function CustomPlanModal({
             name: name.trim(),
             price_dkk: priceDkk,
             description: description.trim() || undefined,
+            stripe_price_id: stripePriceId.trim() || undefined,
             start_date: startDate,
             end_date: endDate || undefined,
             status: status as any,
@@ -1852,6 +1854,7 @@ function CustomPlanModal({
             name: name.trim(),
             price_dkk: priceDkk,
             description: description.trim() || undefined,
+            stripe_price_id: stripePriceId.trim() || undefined,
             start_date: startDate,
             end_date: endDate || undefined,
           },
@@ -1941,6 +1944,31 @@ function CustomPlanModal({
               placeholder="Aftalens vilkår, kontaktperson, kontraktreference…"
               className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:border-ring focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Stripe Price ID (valgfri)
+            </label>
+            <input
+              value={stripePriceId}
+              onChange={(e) => setStripePriceId(e.target.value)}
+              placeholder="price_xxxxxxxxxxxxxxxxxx"
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-sm focus:border-ring focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Find i{" "}
+              <a
+                href="https://dashboard.stripe.com/products"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Stripe Dashboard → Produkter
+              </a>
+              {" "}→ åbn produktet → kopiér Price ID fra den relevante pris.
+              Bruges når organisationen køber via Stripe checkout.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
