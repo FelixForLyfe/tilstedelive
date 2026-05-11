@@ -65,7 +65,9 @@ type ShiftTemplate = {
 
 type OrgMember = {
   user_id: string;
-  profiles?: { full_name: string | null };
+  role: string;
+  full_name: string | null;
+  email: string | null;
 };
 
 type VagtSettings = {
@@ -102,22 +104,23 @@ function ShiftCard({
   shift,
   erAdmin,
   onEdit,
-  onDelete,
 }: {
   shift: Shift;
   erAdmin: boolean;
   onEdit: (s: Shift) => void;
-  onDelete: (id: string) => void;
 }) {
-  const assigned = shift.shift_assignments?.length ?? 0;
+  const assignments = shift.shift_assignments ?? [];
+  const assigned = assignments.filter((a) => a.status !== "declined");
+  const isFull = assigned.length >= shift.required_staff;
   const statusColor =
-    shift.status === "published" ? "border-success/40 bg-success/5"
-    : shift.status === "cancelled" ? "border-destructive/30 bg-destructive/5 opacity-60"
-    : "border-border bg-background";
+    shift.status === "published"
+      ? isFull ? "border-success/40 bg-success/5" : "border-amber-500/40 bg-amber-500/5"
+      : shift.status === "cancelled" ? "border-destructive/30 bg-destructive/5 opacity-60"
+      : "border-border bg-background";
 
   return (
     <div
-      className={`rounded-xl border px-2.5 py-2 text-xs cursor-pointer select-none ${statusColor}`}
+      className={`rounded-xl border px-2.5 py-2 text-xs cursor-pointer select-none ${statusColor} ${erAdmin ? "hover:opacity-80" : ""}`}
       style={{ borderLeftColor: shift.color, borderLeftWidth: 3 }}
       onClick={() => erAdmin && onEdit(shift)}
     >
@@ -125,11 +128,24 @@ function ShiftCard({
         {shift.start_time.slice(0, 5)}–{shift.end_time.slice(0, 5)}
       </div>
       {shift.role && <div className="text-muted-foreground truncate">{shift.role}</div>}
-      <div className="flex items-center gap-1 mt-0.5 text-muted-foreground">
+      <div className={`flex items-center gap-1 mt-0.5 ${isFull ? "text-success" : "text-amber-600 dark:text-amber-400"}`}>
         <Users className="h-2.5 w-2.5" />
-        <span>{assigned}/{shift.required_staff}</span>
-        {shift.is_open && <span className="text-amber-500 font-medium">Åben</span>}
+        <span>{assigned.length}/{shift.required_staff}</span>
+        {shift.is_open && !isFull && <span className="text-amber-500 font-medium ml-1">Åben</span>}
       </div>
+      {/* Show assigned names compactly */}
+      {assigned.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          {assigned.slice(0, 3).map((a, i) => (
+            <div key={i} className="truncate text-[10px] text-muted-foreground">
+              {a.profiles?.full_name ?? "?"}
+            </div>
+          ))}
+          {assigned.length > 3 && (
+            <div className="text-[10px] text-muted-foreground">+{assigned.length - 3} mere</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -146,6 +162,111 @@ type ShiftFormData = {
   status: "draft" | "published" | "cancelled";
   template_id: string;
 };
+
+function StaffAssignmentPicker({
+  members,
+  assignedUsers,
+  onToggle,
+  requiredStaff,
+}: {
+  members: OrgMember[];
+  assignedUsers: string[];
+  onToggle: (uid: string) => void;
+  requiredStaff: number;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = members.filter((m) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (m.full_name ?? "").toLowerCase().includes(q) ||
+      (m.email ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  const assigned = members.filter((m) => assignedUsers.includes(m.user_id));
+  const unassigned = filtered.filter((m) => !assignedUsers.includes(m.user_id));
+
+  const displayName = (m: OrgMember) => m.full_name ?? m.email ?? m.user_id.slice(0, 8);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs text-muted-foreground font-medium">
+          Tildelt personale
+        </label>
+        <span className={`text-xs font-semibold ${
+          assignedUsers.length >= requiredStaff ? "text-success" : "text-amber-600 dark:text-amber-400"
+        }`}>
+          {assignedUsers.length} / {requiredStaff} påkrævet
+        </span>
+      </div>
+
+      {/* Already assigned — shown as chips */}
+      {assigned.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {assigned.map((m) => (
+            <button
+              key={m.user_id}
+              type="button"
+              onClick={() => onToggle(m.user_id)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-destructive/10 hover:text-destructive transition"
+              title="Klik for at fjerne"
+            >
+              <span>{displayName(m)}</span>
+              <span className="opacity-60">×</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search + list of unassigned */}
+      <div className="rounded-xl border border-input overflow-hidden">
+        <div className="border-b border-input px-3 py-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Søg i ${members.length} medarbejdere…`}
+            className="w-full bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <div className="max-h-44 overflow-y-auto">
+          {unassigned.length === 0 ? (
+            <p className="px-3 py-3 text-xs text-muted-foreground">
+              {search ? "Ingen match" : "Alle medarbejdere er allerede tildelt."}
+            </p>
+          ) : (
+            unassigned.map((m) => (
+              <button
+                key={m.user_id}
+                type="button"
+                onClick={() => onToggle(m.user_id)}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-primary/5 transition border-b border-border/40 last:border-0"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase">
+                  {(displayName(m)).charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{displayName(m)}</p>
+                  {m.email && m.full_name && (
+                    <p className="text-xs text-muted-foreground truncate">{m.email}</p>
+                  )}
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  m.role === "admin" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground"
+                }`}>
+                  {m.role === "admin" ? "Admin" : "Personale"}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ShiftModal({
   orgId,
@@ -441,32 +562,12 @@ function ShiftModal({
         </div>
 
         {/* Staff assignment */}
-        {members.length > 0 && (
-          <div>
-            <label className="block text-xs text-muted-foreground mb-2">Tildelt personale</label>
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {members.map((m) => {
-                const checked = assignedUsers.includes(m.user_id);
-                return (
-                  <label
-                    key={m.user_id}
-                    className={`flex items-center gap-3 rounded-xl border px-3 py-2 cursor-pointer transition ${
-                      checked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleAssign(m.user_id)}
-                      className="accent-primary"
-                    />
-                    <span className="text-sm">{m.profiles?.full_name ?? m.user_id.slice(0, 8)}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <StaffAssignmentPicker
+          members={members}
+          assignedUsers={assignedUsers}
+          onToggle={toggleAssign}
+          requiredStaff={form.required_staff}
+        />
 
         <div className="flex gap-2 justify-between pt-1">
           {isEdit && (
@@ -543,12 +644,28 @@ function VagtplanSide() {
       .eq("organization_id", aktivOrgId)
       .then(({ data }: any) => setTemplates(data ?? []));
 
-    (supabase as any)
+    // Fetch members then profiles separately (no FK on organization_members → profiles)
+    supabase
       .from("organization_members")
-      .select("user_id,profiles(full_name)")
+      .select("user_id,role")
       .eq("organization_id", aktivOrgId)
       .eq("status", "active")
-      .then(({ data }: any) => setMembers(data ?? []));
+      .then(async ({ data: mems }) => {
+        if (!mems || mems.length === 0) { setMembers([]); return; }
+        const ids = mems.map((m: any) => m.user_id);
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id,full_name,email")
+          .in("id", ids);
+        const profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+        for (const p of profs ?? []) profileMap[p.id] = { full_name: p.full_name, email: p.email };
+        setMembers(mems.map((m: any) => ({
+          user_id: m.user_id,
+          role: m.role,
+          full_name: profileMap[m.user_id]?.full_name ?? null,
+          email: profileMap[m.user_id]?.email ?? null,
+        })));
+      });
   }, [aktivOrgId]);
 
   useEffect(() => { loadShifts(); }, [loadShifts]);
@@ -703,7 +820,6 @@ function VagtplanSide() {
                       shift={s}
                       erAdmin={erAdmin}
                       onEdit={(sh) => setModalShift(sh)}
-                      onDelete={() => {}}
                     />
                   ))
                 )}
@@ -976,11 +1092,19 @@ function VagtbytteTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
 
     const { data: mem } = await (supabase as any)
       .from("organization_members")
-      .select("user_id,profiles(full_name)")
+      .select("user_id,role")
       .eq("organization_id", orgId)
       .eq("status", "active")
-      .neq("user_id", userId);
-    setMembers(mem ?? []);
+      .neq("user_id", userId ?? "");
+    if (mem && mem.length > 0) {
+      const ids = mem.map((m: any) => m.user_id);
+      const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", ids);
+      const pm: Record<string, any> = {};
+      for (const p of profs ?? []) pm[p.id] = p;
+      setMembers(mem.map((m: any) => ({ ...m, full_name: pm[m.user_id]?.full_name ?? null, email: pm[m.user_id]?.email ?? null })));
+    } else {
+      setMembers([]);
+    }
 
     setLoading(false);
   }, [orgId, userId, erAdmin]);
@@ -1091,7 +1215,7 @@ function VagtbytteTab({ orgId, erAdmin }: { orgId: string; erAdmin: boolean }) {
               <option value="">— Åben bytteforespørgsel —</option>
               {members.map((m) => (
                 <option key={m.user_id} value={m.user_id}>
-                  {m.profiles?.full_name ?? m.user_id.slice(0, 8)}
+                  {(m as any).full_name ?? (m as any).email ?? m.user_id.slice(0, 8)}
                 </option>
               ))}
             </select>
