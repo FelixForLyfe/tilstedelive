@@ -1155,7 +1155,7 @@ function Footer() {
           </nav>
         </div>
         <div className="border-t border-border/50 pt-6 text-center text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} Tilstede · support@tilstede.live</p>
+          <p>© {new Date().getFullYear()} Tilstede · <a href="mailto:support@tilstede.live" className="hover:text-foreground transition">support@tilstede.live</a> · <a href="tel:+4581446660" className="hover:text-foreground transition">+45 81 44 66 60</a></p>
           <p className="mt-1 opacity-50">Tilstede er udviklet og drevet af FPH · CVR: 43252771 · Violvej 11, 1 – 4900 Nakskov</p>
         </div>
       </div>
@@ -1186,6 +1186,7 @@ const JSON_LD = JSON.stringify({
     "contactPoint": {
       "@type": "ContactPoint",
       "email": "support@tilstede.live",
+      "telephone": "+4581446660",
       "contactType": "customer support",
       "availableLanguage": "Danish",
     },

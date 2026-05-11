@@ -183,6 +183,7 @@ function PrivatlivsSide() {
             <p className="mt-1">CVR: 43252771</p>
             <p>Violvej 11, 1 · 4900 Nakskov</p>
             <p>E-mail: <a href="mailto:support@tilstede.live" className="text-primary hover:underline">support@tilstede.live</a></p>
+            <p>Tlf.: <a href="tel:+4581446660" className="text-primary hover:underline">+45 81 44 66 60</a></p>
           </div>
           <p>
             Institutioner og virksomheder der opretter en organisation i Tilstede er selvstændigt

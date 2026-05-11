@@ -229,6 +229,11 @@ function SikkerhedSide() {
           Vi svarer gerne på konkrete spørgsmål om databehandling, opbevaring, databehandleraftaler og rettigheder.
           Skriv til os — vi vender tilbage hurtigst muligt.
         </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-muted-foreground">
+          <a href="mailto:support@tilstede.live" className="hover:text-foreground transition">support@tilstede.live</a>
+          <span>·</span>
+          <a href="tel:+4581446660" className="hover:text-foreground transition">+45 81 44 66 60</a>
+        </div>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <a
             href="mailto:support@tilstede.live"
