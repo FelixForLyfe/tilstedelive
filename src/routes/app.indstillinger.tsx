@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare } from "lucide-react";
+import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
@@ -21,7 +21,7 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 type FeatureToggle = {
-  key: keyof Omit<FeatureFlags, "checkin_method">;
+  key: keyof Omit<FeatureFlags, "checkin_method" | "auto_close_day" | "auto_close_time">;
   label: string;
   description: string;
   comingSoon?: boolean;
@@ -261,6 +261,67 @@ function IndstillingerSide() {
             Administrér QR-lokationer og PIN under <strong>Admin → Tjek ind</strong>.
           </p>
         )}
+      </div>
+
+      {/* Logning */}
+      <div className="glass rounded-2xl p-6">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Clock className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-semibold">Logning</h2>
+            <p className="text-xs text-muted-foreground">Indstillinger for daglig lukning.</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Auto-close toggle */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">Luk dagen automatisk</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Dagen lukkes automatisk hver nat på det valgte tidspunkt.
+              </p>
+            </div>
+            <Toggle
+              checked={flags.auto_close_day}
+              onChange={async (v) => {
+                setSavingFlag("auto_close_day");
+                try { await updateFlags({ auto_close_day: v }); }
+                catch { toast.error("Kunne ikke gemme indstilling."); }
+                finally { setSavingFlag(null); }
+              }}
+              disabled={savingFlag === "auto_close_day"}
+            />
+          </div>
+
+          {/* Time picker — only visible when auto-close is ON */}
+          {flags.auto_close_day && (
+            <div className="flex items-center gap-4 rounded-xl border border-border bg-background px-4 py-3">
+              <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="flex flex-1 items-center justify-between gap-3">
+                <label htmlFor="auto-close-time" className="text-sm text-muted-foreground">
+                  Lukketidspunkt
+                </label>
+                <input
+                  id="auto-close-time"
+                  type="time"
+                  value={flags.auto_close_time?.slice(0, 5) ?? "22:00"}
+                  onChange={async (e) => {
+                    const timeVal = e.target.value + ":00"; // "HH:MM" → "HH:MM:00"
+                    setSavingFlag("auto_close_time");
+                    try { await updateFlags({ auto_close_time: timeVal }); }
+                    catch { toast.error("Kunne ikke gemme tidspunkt."); }
+                    finally { setSavingFlag(null); }
+                  }}
+                  disabled={savingFlag === "auto_close_time"}
+                  className="rounded-lg border border-input bg-surface px-3 py-1.5 text-sm font-mono focus:border-ring focus:outline-none disabled:opacity-50"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

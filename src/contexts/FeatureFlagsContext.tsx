@@ -14,6 +14,8 @@ export type FeatureFlags = {
   gulvoversigt: boolean;
   anonym_feedback: boolean;
   checkin_method: CheckinMethod;
+  auto_close_day: boolean;
+  auto_close_time: string; // "HH:MM:SS" from PostgreSQL TIME
 };
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -26,6 +28,8 @@ const DEFAULT_FLAGS: FeatureFlags = {
   gulvoversigt: false,
   anonym_feedback: false,
   checkin_method: "none",
+  auto_close_day: false,
+  auto_close_time: "22:00:00",
 };
 
 type FeatureFlagsCtx = {
@@ -67,6 +71,8 @@ export function FeatureFlagsProvider({ children }: { children: ReactNode }) {
             gulvoversigt: data.gulvoversigt,
             anonym_feedback: data.anonym_feedback,
             checkin_method: data.checkin_method as CheckinMethod,
+            auto_close_day: data.auto_close_day ?? false,
+            auto_close_time: data.auto_close_time ?? "22:00:00",
           }
         : DEFAULT_FLAGS,
     );
