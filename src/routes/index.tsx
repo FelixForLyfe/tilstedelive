@@ -1,7 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Accordion from "@radix-ui/react-accordion";
-import { useServerFn } from "@tanstack/react-start";
 import { submitBetaSignup } from "@/server/beta.functions";
 import {
   CheckCircle2,
@@ -380,7 +379,6 @@ const ORG_TYPES = [
 type BetaState = "idle" | "submitting" | "done" | "error";
 
 function BetaSignupSection() {
-  const doSubmit = useServerFn(submitBetaSignup);
   const { ref, inView } = useInView();
   const [state, setState] = useState<BetaState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -401,7 +399,7 @@ function BetaSignupSection() {
     setState("submitting");
     setErrorMsg("");
     try {
-      await doSubmit({
+      await submitBetaSignup({
         data: {
           name: form.name,
           email: form.email,

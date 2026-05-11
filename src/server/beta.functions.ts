@@ -12,7 +12,7 @@ const BetaSchema = z.object({
 });
 
 export const submitBetaSignup = createServerFn({ method: "POST" })
-  .validator((data: unknown) => BetaSchema.parse(data))
+  .inputValidator((data: unknown) => BetaSchema.parse(data))
   .handler(async ({ data }) => {
     const supabase = createClient(
       process.env.SUPABASE_URL!,
