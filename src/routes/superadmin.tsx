@@ -56,6 +56,7 @@ import {
   superadminCreateCustomPlan,
   superadminUpdateCustomPlan,
   superadminListOrgNames,
+  superadminSetRequire2fa,
   type DashboardOrg,
   type MonthlyCost,
   type CustomPlan,
@@ -90,6 +91,7 @@ type Org = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   gratis_reason: string | null;
+  require_2fa: boolean;
 };
 
 type UserRow = {
@@ -902,6 +904,8 @@ function EditOrgModal({
   const [trialEndsAt, setTrialEndsAt] = useState(org.trial_ends_at ? org.trial_ends_at.slice(0, 10) : "");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [require2fa, setRequire2fa] = useState(org.require_2fa ?? false);
+  const [saving2fa, setSaving2fa] = useState(false);
 
   const tierChanged = tier !== org.subscription_tier;
   const statusChanged = status !== org.subscription_status;
@@ -1017,6 +1021,36 @@ function EditOrgModal({
               <p className="mt-1 text-xs text-muted-foreground">Logges i audit-loggen. Min. 5 tegn.</p>
             </div>
           )}
+        </div>
+
+        {/* require_2fa toggle — saves immediately */}
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Kræv 2FA for alle brugere</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Brugere skal opsætte 2FA for at få adgang.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={require2fa}
+            disabled={saving2fa}
+            onClick={async () => {
+              const next = !require2fa;
+              setRequire2fa(next);
+              setSaving2fa(true);
+              try {
+                await superadminSetRequire2fa({ data: { accessToken, orgId: org.id, require2fa: next } });
+              } catch (err: any) {
+                toast.error(err?.message ?? "Kunne ikke gemme.");
+                setRequire2fa(!next);
+              } finally {
+                setSaving2fa(false);
+              }
+            }}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 ${require2fa ? "bg-primary" : "bg-muted"}`}
+          >
+            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${require2fa ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
         </div>
 
         {(org.stripe_customer_id || org.stripe_subscription_id) && (

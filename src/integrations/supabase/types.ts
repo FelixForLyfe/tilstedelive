@@ -513,6 +513,33 @@ export type Database = {
           },
         ]
       }
+      backup_codes: {
+        Row: {
+          id: string
+          user_id: string
+          code_hash: string
+          used: boolean
+          used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          code_hash: string
+          used?: boolean
+          used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          code_hash?: string
+          used?: boolean
+          used_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       organizations: {
         Row: {
           created_at: string
@@ -524,6 +551,7 @@ export type Database = {
           stripe_subscription_id: string | null
           subscription_tier: 'gratis' | 'basis' | 'pro' | 'organisation'
           subscription_status: 'active' | 'past_due' | 'canceled' | 'trialing'
+          require_2fa: boolean
         }
         Insert: {
           created_at?: string
@@ -535,6 +563,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_tier?: 'gratis' | 'basis' | 'pro' | 'organisation'
           subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing'
+          require_2fa?: boolean
         }
         Update: {
           created_at?: string
@@ -546,6 +575,7 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_tier?: 'gratis' | 'basis' | 'pro' | 'organisation'
           subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing'
+          require_2fa?: boolean
         }
         Relationships: []
       }

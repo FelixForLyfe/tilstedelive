@@ -82,15 +82,15 @@ export const superadminListOrgs = createServerFn({ method: "POST" })
     const user = await verifySuperadmin(data.accessToken);
     await auditLog(user.id, "SUPERADMIN_VISIT");
 
-    // Try full select (includes gratis_reason added in migration 20260509220000)
+    // Try full select (includes gratis_reason + require_2fa from migrations)
     const full = await (supabaseAdmin as any)
       .from("organizations")
       .select(
-        "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id, gratis_reason",
+        "id, name, org_type, subscription_tier, subscription_status, trial_ends_at, created_at, stripe_customer_id, stripe_subscription_id, gratis_reason, require_2fa",
       )
       .order("created_at", { ascending: false });
 
-    // Fall back without gratis_reason if column not yet migrated
+    // Fall back without newer columns if not yet migrated
     if (full.error && isMissingColumn(full.error)) {
       const base = await (supabaseAdmin as any)
         .from("organizations")
@@ -99,11 +99,11 @@ export const superadminListOrgs = createServerFn({ method: "POST" })
         )
         .order("created_at", { ascending: false });
       if (base.error) throw new Error(base.error.message);
-      return (base.data ?? []).map((o: any) => ({ ...o, gratis_reason: null }));
+      return (base.data ?? []).map((o: any) => ({ ...o, gratis_reason: null, require_2fa: false }));
     }
 
     if (full.error) throw new Error(full.error.message);
-    return (full.data ?? []).map((o: any) => ({ ...o, gratis_reason: o.gratis_reason ?? null }));
+    return (full.data ?? []).map((o: any) => ({ ...o, gratis_reason: o.gratis_reason ?? null, require_2fa: o.require_2fa ?? false }));
   });
 
 // ─── Lightweight org list for dropdowns ──────────────────────────────────────
@@ -750,5 +750,22 @@ export const superadminUpdateCustomPlan = createServerFn({ method: "POST" })
       new_status: data.status,
     });
 
+    return { success: true };
+  });
+
+// ─── Toggle require_2fa on an organisation ────────────────────────────────────
+
+export const superadminSetRequire2fa = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z.object({ accessToken: z.string().min(1), orgId: z.string().uuid(), require2fa: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const user = await verifySuperadmin(data.accessToken);
+    const { error } = await (supabaseAdmin as any)
+      .from("organizations")
+      .update({ require_2fa: data.require2fa })
+      .eq("id", data.orgId);
+    if (error) throw new Error(error.message);
+    await auditLog(user.id, "SUPERADMIN_SET_REQUIRE_2FA", data.orgId, { require_2fa: data.require2fa });
     return { success: true };
   });

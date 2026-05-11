@@ -15,12 +15,23 @@ export const Route = createFileRoute("/app")({
     const { data } = await supabase.auth.getSession();
     if (!data.session) throw redirect({ to: "/login" });
 
-    // Only enforce 2FA verification when the user has enrolled a factor (nextLevel = aal2)
-    // but hasn't verified it in this session yet.
-    // Do NOT redirect to setup-2fa here — aal1/aal1 is the normal state for users without MFA.
+    // Enforce 2FA verification if the user has enrolled a factor but hasn't verified this session.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
       throw redirect({ to: "/verify-2fa" });
+    }
+
+    // If the user's organisation requires 2FA and they have no factors enrolled, send them to setup.
+    const orgId = localStorage.getItem("tilstede.aktivOrgId");
+    if (orgId) {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("require_2fa")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (org?.require_2fa && aal?.nextLevel !== "aal2") {
+        throw redirect({ to: "/setup-2fa" });
+      }
     }
   },
   component: AppLayout,
@@ -192,7 +203,7 @@ function AppLayout() {
           </p>
           <div className="mt-6 flex justify-center gap-2">
             <button onClick={handleLogout} className="rounded-xl border border-border bg-surface px-4 py-2 text-sm">Log ud</button>
-            <Link to="/signup" className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Opret organisation</Link>
+            <Link to="/signup" search={{ plan: undefined }} className="rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Opret organisation</Link>
           </div>
         </div>
       </div>

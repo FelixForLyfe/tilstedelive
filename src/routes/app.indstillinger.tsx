@@ -1,11 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
-import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare, Clock, CalendarDays, Plus, Trash2 } from "lucide-react";
+import { KeyRound, CheckCircle2, Zap, QrCode, KeySquare, Clock, CalendarDays, Plus, Trash2, ShieldCheck, ShieldOff, RefreshCw, Download, Copy, Check, AlertTriangle, Smartphone, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { useFeatureFlags, type FeatureFlags, type CheckinMethod } from "@/contexts/FeatureFlagsContext";
 import { redeemPlanKey } from "@/server/plans.functions";
+import { generateBackupCodes, getBackupCodeStatus, disableMfa } from "@/server/mfa.functions";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export const Route = createFileRoute("/app/indstillinger")({
   component: IndstillingerSide,
@@ -346,6 +348,304 @@ function VagtplanSettingsSection({ orgId }: { orgId: string }) {
   );
 }
 
+// ─── 2FA / Sikkerhed section ─────────────────────────────────────────────────
+
+type MfaFactor = { id: string; factor_type: string; friendly_name?: string | null };
+type BackupView = "skjult" | "vis" | "generer";
+
+function SikkerhedSection() {
+  const navigate = useNavigate();
+
+  const [indlaes, setIndlaes] = useState(true);
+  const [faktorer, setFaktorer] = useState<MfaFactor[]>([]);
+  const [backupStatus, setBackupStatus] = useState<{ total: number; unused: number } | null>(null);
+  const [backupView, setBackupView] = useState<BackupView>("skjult");
+  const [nyeKoder, setNyeKoder] = useState<string[]>([]);
+  const [kopieret, setKopieret] = useState(false);
+  const [bekraeftet, setBekraeftet] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+
+  // Disable 2FA dialog state
+  const [visDeaktiverDialog, setVisDeaktiverDialog] = useState(false);
+  const [adgangskode, setAdgangskode] = useState("");
+  const [deaktiverLoading, setDeaktiverLoading] = useState(false);
+  const [brugerEmail, setBrugerEmail] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    setBrugerEmail(session.user?.email ?? null);
+
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    const all: MfaFactor[] = (factors as any)?.all ?? [];
+    setFaktorer(all);
+
+    if (all.length > 0) {
+      try {
+        const st = await getBackupCodeStatus({ data: { accessToken: session.access_token } });
+        setBackupStatus(st);
+      } catch {
+        setBackupStatus(null);
+      }
+    }
+
+    setIndlaes(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const aktiveret = faktorer.length > 0;
+
+  const metodeMaerke = () => {
+    const totp = faktorer.find((f) => f.factor_type === "totp");
+    const email = faktorer.find((f) => f.factor_type === "email");
+    if (totp && email) return "Autentifikator-app + Email";
+    if (totp) return "Autentifikator-app";
+    if (email) return "Email-kode";
+    return "Ingen";
+  };
+
+  const genererNyeKoder = async () => {
+    setBackupLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session mangler.");
+      const result = await generateBackupCodes({ data: { accessToken: session.access_token } });
+      setNyeKoder(result.codes);
+      setBackupView("generer");
+      setBekraeftet(false);
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke generere backup-koder.");
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const kopierKoder = async () => {
+    await navigator.clipboard.writeText(nyeKoder.join("\n")).catch(() => {});
+    setKopieret(true);
+    setTimeout(() => setKopieret(false), 2000);
+  };
+
+  const downloadKoder = () => {
+    const content = [
+      "Tilstede — Backup-koder til 2FA",
+      "=================================",
+      "Gem disse koder et sikkert sted.",
+      "Hver kode kan kun bruges én gang.",
+      "",
+      ...nyeKoder,
+      "",
+      `Genereret: ${new Date().toLocaleDateString("da-DK")}`,
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tilstede-backup-koder.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const deaktiverMfa = async () => {
+    if (!adgangskode || !brugerEmail) return;
+    setDeaktiverLoading(true);
+    try {
+      // Re-authenticate to confirm identity
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: brugerEmail,
+        password: adgangskode,
+      });
+      if (authErr) {
+        toast.error("Forkert adgangskode. Prøv igen.");
+        setDeaktiverLoading(false);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session mangler.");
+
+      await disableMfa({ data: { accessToken: session.access_token } });
+      await supabase.auth.refreshSession();
+
+      toast.success("Tofaktorautentifikation er deaktiveret.");
+      setVisDeaktiverDialog(false);
+      setAdgangskode("");
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Deaktivering mislykkedes.");
+    } finally {
+      setDeaktiverLoading(false);
+    }
+  };
+
+  if (indlaes) return <div className="text-sm text-muted-foreground">Indlæser…</div>;
+
+  return (
+    <div className="glass rounded-2xl p-6">
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h2 className="font-semibold">Sikkerhed</h2>
+          <p className="text-xs text-muted-foreground">Tofaktorautentifikation og backup-koder.</p>
+        </div>
+      </div>
+
+      {/* Status badge */}
+      <div className={`mb-5 flex items-center gap-3 rounded-xl p-3 ${aktiveret ? "bg-success/10 border border-success/20" : "bg-muted/40 border border-border"}`}>
+        {aktiveret ? (
+          <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+        ) : (
+          <ShieldOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${aktiveret ? "text-success" : "text-muted-foreground"}`}>
+            {aktiveret ? "2FA er aktiveret" : "2FA er ikke aktiveret"}
+          </p>
+          {aktiveret && (
+            <p className="text-xs text-muted-foreground mt-0.5">Metode: {metodeMaerke()}</p>
+          )}
+        </div>
+      </div>
+
+      {!aktiveret ? (
+        <button
+          onClick={() => navigate({ to: "/setup-2fa" })}
+          className="w-full rounded-xl bg-gradient-primary px-4 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
+        >
+          Aktivér tofaktorautentifikation
+        </button>
+      ) : (
+        <div className="space-y-3">
+          {/* Backup codes */}
+          {backupView === "skjult" && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Backup-koder</p>
+                {backupStatus ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {backupStatus.unused} / {backupStatus.total} koder tilbage
+                    {backupStatus.unused <= 2 && backupStatus.unused > 0 && (
+                      <span className="ml-1.5 text-warning"> — kun få tilbage</span>
+                    )}
+                    {backupStatus.unused === 0 && (
+                      <span className="ml-1.5 text-destructive"> — alle brugt</span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-xs text-muted-foreground">Ingen backup-koder oprettet endnu</p>
+                )}
+              </div>
+              <button
+                onClick={genererNyeKoder}
+                disabled={backupLoading}
+                className="shrink-0 flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-medium transition hover:bg-surface-elevated disabled:opacity-50"
+              >
+                {backupLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {backupStatus ? "Regenerér" : "Opret koder"}
+              </button>
+            </div>
+          )}
+
+          {/* New backup codes display */}
+          {backupView === "generer" && nyeKoder.length > 0 && (
+            <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+              <div className="mb-3 flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <p className="text-xs text-warning-foreground">
+                  <strong>Disse koder vises kun én gang.</strong> Gem dem nu.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {nyeKoder.map((c) => (
+                  <div key={c} className="rounded-lg border border-border bg-background px-3 py-1.5 text-center font-mono text-sm tracking-widest">
+                    {c}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mb-3">
+                <button onClick={kopierKoder} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs transition hover:bg-surface">
+                  {kopieret ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                  {kopieret ? "Kopieret!" : "Kopiér"}
+                </button>
+                <button onClick={downloadKoder} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs transition hover:bg-surface">
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                </button>
+              </div>
+              <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border bg-surface/40 p-3 mb-2">
+                <input type="checkbox" checked={bekraeftet} onChange={(e) => setBekraeftet(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+                <span className="text-xs leading-snug">Jeg har gemt mine backup-koder</span>
+              </label>
+              <button
+                onClick={() => { setBackupView("skjult"); setNyeKoder([]); load(); }}
+                disabled={!bekraeftet}
+                className="w-full rounded-xl bg-primary/10 py-2 text-sm font-medium text-primary transition hover:bg-primary/20 disabled:opacity-40"
+              >
+                Luk
+              </button>
+            </div>
+          )}
+
+          {/* Change method */}
+          <button
+            onClick={() => navigate({ to: "/setup-2fa" })}
+            className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-surface"
+          >
+            Skift 2FA-metode
+          </button>
+
+          {/* Disable 2FA */}
+          <button
+            onClick={() => setVisDeaktiverDialog(true)}
+            className="w-full rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm font-medium text-destructive transition hover:bg-destructive/10"
+          >
+            <ShieldOff className="mr-1.5 inline h-4 w-4" />
+            Deaktivér 2FA
+          </button>
+        </div>
+      )}
+
+      {/* Disable 2FA confirmation dialog */}
+      {visDeaktiverDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
+          <div className="glass w-full max-w-sm rounded-3xl p-6 shadow-card">
+            <h3 className="font-display text-lg font-bold">Deaktivér 2FA?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Bekræft med din adgangskode for at deaktivere tofaktorautentifikation.
+            </p>
+            <div className="mt-4 space-y-3">
+              <PasswordInput
+                value={adgangskode}
+                onChange={(e) => setAdgangskode(e.target.value)}
+                placeholder="Din adgangskode"
+                autoFocus
+              />
+              <button
+                onClick={deaktiverMfa}
+                disabled={deaktiverLoading || !adgangskode}
+                className="w-full rounded-xl bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground transition hover:opacity-90 disabled:opacity-50"
+              >
+                {deaktiverLoading ? "Deaktiverer…" : "Bekræft og deaktivér"}
+              </button>
+              <button
+                onClick={() => { setVisDeaktiverDialog(false); setAdgangskode(""); }}
+                className="w-full rounded-xl py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Annuller
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IndstillingerSide() {
   const { aktivOrgId, erAdmin, genindlaes } = useOrg();
   const { flags, loading: flagsLoading, updateFlags } = useFeatureFlags();
@@ -558,6 +858,9 @@ function IndstillingerSide() {
           <VagtplanSettingsSection orgId={aktivOrgId} />
         </div>
       )}
+
+      {/* Sikkerhed */}
+      <SikkerhedSection />
 
       {/* Logning */}
       <div className="glass rounded-2xl p-6">
