@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { resetUser, setSessionRecording } from "@/lib/posthog";
 
 type AuthCtx = {
   user: User | null;
@@ -21,16 +22,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       setLoading(false);
+      // Disable session recording for logged-in users to protect personal data
+      if (s) setSessionRecording(false);
     });
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
+      if (data.session) setSessionRecording(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
   const logUd = async () => {
     await supabase.auth.signOut();
+    resetUser();
+    setSessionRecording(true);
   };
 
   return (

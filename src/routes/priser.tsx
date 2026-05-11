@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sparkles,
   Check,
@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrg } from "@/contexts/OrgContext";
 import { createCheckoutSession } from "@/server/stripe.functions";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/posthog";
 
 export const Route = createFileRoute("/priser")({
   head: () => ({
@@ -158,6 +159,8 @@ function PriserSide() {
   const startCheckout = useServerFn(createCheckoutSession);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
+  useEffect(() => { trackEvent("pricing_page_viewed"); }, []);
+
   const handleVælg = async (planId: Plan["id"]) => {
     if (!session) {
       navigate({ to: "/signup", search: { plan: planId } as any });
@@ -169,6 +172,7 @@ function PriserSide() {
     }
 
     setLoadingPlan(planId);
+    trackEvent("checkout_started", { plan: planId });
     try {
       const origin = window.location.origin;
       const result = await startCheckout({

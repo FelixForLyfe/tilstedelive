@@ -4,6 +4,7 @@ import { Users, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PasswordInput } from "@/components/ui/password-input";
+import { trackEvent } from "@/lib/posthog";
 
 export const Route = createFileRoute("/login/personale")({
   component: TeamLogin,
@@ -22,6 +23,7 @@ function TeamLogin() {
     const { data: signIn, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !signIn.user) {
       setLoading(false);
+      trackEvent("login_failed", { method: "personale" });
       toast.error("Login fejlede", { description: "Forkert e-mail eller adgangskode." });
       return;
     }
@@ -47,6 +49,7 @@ function TeamLogin() {
 
     localStorage.setItem("tilstede.aktivOrgId", match.organization_id);
     setLoading(false);
+    trackEvent("login_success", { method: "personale" });
     toast.success(`Velkommen til ${(match as any).organizations?.name}`);
     navigate({ to: "/app" });
   };

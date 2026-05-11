@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Sparkles,
   ShieldCheck,
@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { createOrganizationAdmin } from "@/server/organization.functions";
 import { createCheckoutSession } from "@/server/stripe.functions";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/posthog";
 import { PasswordInput } from "@/components/ui/password-input";
 import { type OrgType } from "@/lib/terminology";
 
@@ -99,6 +100,8 @@ function SignupSide() {
   const opretOrganisation = useServerFn(createOrganizationAdmin);
   const startCheckout = useServerFn(createCheckoutSession);
 
+  useEffect(() => { trackEvent("signup_started", { plan: plan ?? null }); }, []);
+
   const [navn, setNavn] = useState("");
   const [orgNavn, setOrgNavn] = useState("");
   const [orgType, setOrgType] = useState<OrgType>("skole_sfo");
@@ -126,6 +129,9 @@ function SignupSide() {
       if (signInErr) throw signInErr;
 
       localStorage.setItem("tilstede.aktivOrgId", org.organizationId);
+      trackEvent("signup_completed", { org_type: orgType, plan: plan ?? "gratis" });
+      trackEvent("org_created", { org_type: orgType });
+      trackEvent("trial_started", { org_type: orgType });
 
       // If arriving from pricing page, go to Stripe checkout
       if (plan && signInData.session) {

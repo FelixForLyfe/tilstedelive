@@ -38,6 +38,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { getPostHogMetrics } from "@/server/posthog.functions";
 import {
   superadminListOrgs,
   superadminUpdateOrg,
@@ -206,6 +207,7 @@ const CUSTOM_PLAN_STATUS_COLORS: Record<string, string> = {
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "analyse", label: "Analyse", icon: TrendingUp },
   { id: "orgs", label: "Organisationer", icon: Building2 },
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
@@ -326,6 +328,7 @@ function SuperadminPanel() {
         </div>
 
         {activeTab === "dashboard" && <DashboardTab accessToken={accessToken} />}
+        {activeTab === "analyse" && <AnalyseTab />}
         {activeTab === "orgs" && (
           <OrgsTab orgs={orgs} loading={orgsLoading} onEdit={setEditOrg} onRefresh={loadOrgs} />
         )}
@@ -374,6 +377,122 @@ function HealthPill({ label, status, value }: { label: string; status: "green" |
         <p className="text-xs font-medium opacity-80">{label}</p>
         <p className="font-semibold">{value}</p>
       </div>
+    </div>
+  );
+}
+
+// ─── Analyse Tab ─────────────────────────────────────────────────────────────
+
+function AnalyseTab() {
+  const [metrics, setMetrics] = useState<{
+    pageviews7d: number; signups7d: number; loginEvents7d: number; checkouts7d: number;
+    topEvents: { event: string; count: number }[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const phHost = import.meta.env.VITE_POSTHOG_HOST as string | undefined;
+
+  useEffect(() => {
+    getPostHogMetrics().then((data) => {
+      if (!data) setNotConfigured(true);
+      else setMetrics(data);
+      setLoading(false);
+    });
+  }, []);
+
+  const EVENT_LABELS: Record<string, string> = {
+    "$pageview": "Sidevisninger",
+    "signup_completed": "Tilmeldinger",
+    "login_success": "Logins",
+    "checkout_started": "Checkout startet",
+  };
+
+  if (loading) return <div className="text-sm text-muted-foreground py-8 text-center">Henter analysedata…</div>;
+
+  if (notConfigured) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">PostHog Analyse</h2>
+        <div className="glass rounded-2xl p-6 space-y-4">
+          <p className="text-sm font-medium">Konfiguration påkrævet</p>
+          <p className="text-sm text-muted-foreground">
+            Tilføj disse environment variables til Vercel for at se analysedata:
+          </p>
+          <div className="rounded-xl bg-muted/50 p-4 font-mono text-xs space-y-1">
+            <div>POSTHOG_PERSONAL_API_KEY=phx_...</div>
+            <div>POSTHOG_PROJECT_ID=12345</div>
+            <div>VITE_POSTHOG_KEY=phc_...</div>
+            <div>VITE_POSTHOG_HOST=https://eu.i.posthog.com</div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Find din Personal API Key under PostHog → Settings → Personal API Keys.
+            Brug en nøgle med <strong>read</strong>-adgang til projektet.
+          </p>
+          {phHost && (
+            <a href={phHost} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+              Åbn PostHog dashboard ↗
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const statCards = [
+    { label: "Sidevisninger (7 dage)", value: metrics!.pageviews7d, color: "text-primary" },
+    { label: "Nye tilmeldinger (7 dage)", value: metrics!.signups7d, color: "text-success" },
+    { label: "Logins (7 dage)", value: metrics!.loginEvents7d, color: "text-blue-500" },
+    { label: "Checkout startet (7 dage)", value: metrics!.checkouts7d, color: "text-amber-500" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">PostHog Analyse</h2>
+        {phHost && (
+          <a href={phHost} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-1.5 text-sm hover:bg-muted">
+            Åbn PostHog ↗
+          </a>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {statCards.map((c) => (
+          <div key={c.label} className="glass rounded-2xl p-4">
+            <p className="text-xs text-muted-foreground mb-1">{c.label}</p>
+            <p className={`text-3xl font-bold ${c.color}`}>{c.value.toLocaleString("da-DK")}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="glass rounded-2xl p-5">
+        <h3 className="text-sm font-semibold mb-3">Events (7 dage)</h3>
+        <div className="space-y-2">
+          {metrics!.topEvents.map((e) => {
+            const max = metrics!.topEvents[0]?.count || 1;
+            return (
+              <div key={e.event} className="flex items-center gap-3">
+                <span className="w-36 text-xs text-muted-foreground shrink-0">
+                  {EVENT_LABELS[e.event] ?? e.event}
+                </span>
+                <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary/60 transition-all"
+                    style={{ width: `${(e.count / max) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-semibold w-10 text-right">{e.count.toLocaleString("da-DK")}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Data hentes direkte fra PostHog API. Kun brugere der har accepteret cookies indgår i statistikken.
+      </p>
     </div>
   );
 }

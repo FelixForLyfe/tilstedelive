@@ -1,37 +1,23 @@
 import { useEffect } from "react";
 import { useRouterState } from "@tanstack/react-router";
-
-const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
-const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST as string | undefined;
-
-function PostHogPageView() {
-  const { location } = useRouterState();
-  useEffect(() => {
-    if (!POSTHOG_KEY || typeof window === "undefined") return;
-    import("posthog-js").then(({ default: posthog }) => {
-      posthog.capture("$pageview", { $current_url: window.location.href });
-    });
-  }, [location.pathname, location.search]);
-  return null;
-}
+import { getCookieConsent } from "@/components/CookieBanner";
+import { initPostHog, trackEvent } from "@/lib/posthog";
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  const { location } = useRouterState();
+
+  // Init on mount if consent was already given in a previous session
   useEffect(() => {
-    if (!POSTHOG_KEY || typeof window === "undefined") return;
-    import("posthog-js").then(({ default: posthog }) => {
-      posthog.init(POSTHOG_KEY!, {
-        api_host: POSTHOG_HOST,
-        person_profiles: "identified_only",
-        capture_pageview: false,
-        capture_pageleave: true,
-      });
-    });
+    if (getCookieConsent() === "accepted") {
+      initPostHog({ loggedIn: false });
+    }
   }, []);
 
-  return (
-    <>
-      <PostHogPageView />
-      {children}
-    </>
-  );
+  // Page view on every route change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    trackEvent("$pageview", { $current_url: window.location.href });
+  }, [location.pathname, location.search]);
+
+  return <>{children}</>;
 }

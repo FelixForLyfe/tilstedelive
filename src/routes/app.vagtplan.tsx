@@ -8,6 +8,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { toast } from "sonner";
+import { trackEvent } from "@/lib/posthog";
 
 export const Route = createFileRoute("/app/vagtplan")({
   component: VagtplanSide,
@@ -1145,6 +1146,7 @@ function VagtplanSide() {
     if (!confirm(`Publicer ${draftIds.length} kladdevagter for denne uge?`)) return;
     const { error } = await (supabase as any).from("shifts").update({ status: "published" }).in("id", draftIds);
     if (error) return toast.error(error.message);
+    trackEvent("vagtplan_published", { shift_count: draftIds.length });
     toast.success(`${draftIds.length} vagter publiceret.`);
     loadShifts();
   };

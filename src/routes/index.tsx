@@ -12,6 +12,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/lib/posthog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -38,8 +39,8 @@ export const Route = createFileRoute("/")({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function trackCta(location: string) {
-  try { (window as any).gtag?.("event", "cta_click", { cta_location: location }); } catch {}
+function trackCta(label: string, location?: string) {
+  trackEvent("cta_clicked", { label, location: location ?? label });
 }
 
 function useInView(threshold = 0.15) {
@@ -974,6 +975,7 @@ function ReviewsSection() {
         },
       });
       setState("done");
+      trackEvent("review_submitted", { stars, org_type: orgType || null });
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Noget gik galt. Prøv igen.");
       setState("error");
@@ -1206,7 +1208,8 @@ function FaqSection() {
           <h2 className="font-display text-3xl font-bold sm:text-4xl">Ofte stillede spørgsmål</h2>
         </div>
         <div ref={ref} className={`transition-all duration-700 ${inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
-          <Accordion.Root type="single" collapsible className="space-y-2">
+          <Accordion.Root type="single" collapsible className="space-y-2"
+            onValueChange={(v) => { if (v) trackEvent("faq_opened", { question: v }); }}>
             {FAQS.map((faq) => (
               <Accordion.Item key={faq.q} value={faq.q} className="glass overflow-hidden rounded-2xl border border-border/50">
                 <Accordion.Header>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Cookie, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { initPostHog, optOutPostHog } from "@/lib/posthog";
 
 const CONSENT_KEY = "tilstede:cookie-consent";
 
@@ -22,16 +23,13 @@ export function CookieBanner() {
   const accepter = () => {
     localStorage.setItem(CONSENT_KEY, "accepted");
     setVisible(false);
+    initPostHog({ loggedIn: false });
   };
 
-  const kunNødvendige = () => {
+  const decline = () => {
     localStorage.setItem(CONSENT_KEY, "necessary");
     setVisible(false);
-  };
-
-  const luk = () => {
-    localStorage.setItem(CONSENT_KEY, "necessary");
-    setVisible(false);
+    optOutPostHog();
   };
 
   if (!visible) return null;
@@ -41,7 +39,7 @@ export function CookieBanner() {
       <div className="glass relative mx-auto max-w-2xl rounded-2xl p-4 shadow-card sm:p-5">
         <button
           aria-label="Luk"
-          onClick={luk}
+          onClick={decline}
           className="absolute right-2 top-2 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
         >
           <X className="h-4 w-4" />
@@ -56,7 +54,7 @@ export function CookieBanner() {
             <p className="text-sm font-semibold">Vi bruger cookies</p>
             <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
               Vi bruger nødvendige cookies til at holde dig logget ind og huske dine indstillinger.
-              Vi indsamler ikke sporings- eller reklame­cookies.{" "}
+              Med dit samtykke bruger vi PostHog til anonymiseret produktanalyse — ingen reklame­sporing.{" "}
               <Link
                 to="/privatlivspolitik"
                 className="text-primary underline-offset-2 hover:underline"
@@ -74,7 +72,7 @@ export function CookieBanner() {
                 Acceptér alle
               </button>
               <button
-                onClick={kunNødvendige}
+                onClick={decline}
                 className="rounded-xl bg-surface px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-elevated"
               >
                 Kun nødvendige

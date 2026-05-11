@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import { getTerms, type OrgType, type Terms } from "@/lib/terminology";
+import { identifyUser } from "@/lib/posthog";
 
 export type Medlemskab = {
   organization_id: string;
@@ -95,6 +96,18 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   };
 
   const aktivOrg = medlemskaber.find((m) => m.organization_id === aktivOrgId) ?? null;
+
+  // Identify user in PostHog once org data is loaded
+  useEffect(() => {
+    if (!user || !aktivOrg) return;
+    identifyUser(user.id, {
+      email: user.email,
+      org_type: aktivOrg.organizations?.org_type ?? null,
+      plan: aktivOrg.organizations?.subscription_tier ?? null,
+      subscription_status: aktivOrg.organizations?.subscription_status ?? null,
+      created_at: user.created_at,
+    });
+  }, [user?.id, aktivOrg?.organization_id]);
   const erAdmin = aktivOrg?.role === "admin";
   const orgType = (aktivOrg?.organizations?.org_type ?? null) as OrgType | null;
   const terms = getTerms(orgType);
