@@ -1506,7 +1506,7 @@ function CustomPlanModal({
         await superadminCreateCustomPlan({
           data: {
             accessToken,
-            organization_id: orgId,
+            organizationId: orgId,
             name: name.trim(),
             price_dkk: priceDkk,
             description: description.trim() || undefined,
