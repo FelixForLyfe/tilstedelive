@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard, Settings } from "lucide-react";
+import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard, Settings, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrg, type BlockReason } from "@/contexts/OrgContext";
+import { useFeatureFlags } from "@/contexts/FeatureFlagsContext";
 import { createBillingPortalSession } from "@/server/stripe.functions";
 
 export const Route = createFileRoute("/app")({
@@ -115,6 +116,7 @@ function Paywall({
 function AppLayout() {
   const { user, logUd, session } = useAuth();
   const { medlemskaber, aktivOrg, aktivOrgId, vaelgOrg, erAdmin, loading, loadError, genindlaes, trialDaysLeft, isBlocked, blockReason } = useOrg();
+  const { flags } = useFeatureFlags();
   const navigate = useNavigate();
   const path = useRouterState({ select: (r) => r.location.pathname });
   const openBillingPortal = useServerFn(createBillingPortalSession);
@@ -145,9 +147,10 @@ function AppLayout() {
   };
 
   const navItems = [
-    { to: "/app", label: "Status", icon: Home, exact: true },
-    { to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity },
-    { to: "/app/logning", label: "Logning", icon: Clock },
+    ...(flags.status ? [{ to: "/app", label: "Status", icon: Home, exact: true }] : []),
+    ...(flags.aktiviteter ? [{ to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity }] : []),
+    ...(flags.arbejdstidslog ? [{ to: "/app/logning", label: "Logning", icon: Clock }] : []),
+    ...(flags.checkin_method !== "none" ? [{ to: "/checkin", label: "Tjek ind", icon: QrCode }] : []),
     ...(erAdmin ? [
       { to: "/app/arkiv", label: "Arkiv", icon: Archive },
       { to: "/app/admin", label: "Admin", icon: ShieldCheck },

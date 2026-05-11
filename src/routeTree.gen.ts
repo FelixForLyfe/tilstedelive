@@ -18,16 +18,19 @@ import { Route as Setup2faRouteImport } from './routes/setup-2fa'
 import { Route as PrivatlivspolitikRouteImport } from './routes/privatlivspolitik'
 import { Route as PriserRouteImport } from './routes/priser'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as CheckinRouteImport } from './routes/checkin'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignupIndexRouteImport } from './routes/signup.index'
 import { Route as LoginIndexRouteImport } from './routes/login.index'
+import { Route as CheckinIndexRouteImport } from './routes/checkin.index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as SignupPersonaleRouteImport } from './routes/signup.personale'
 import { Route as LoginPersonaleRouteImport } from './routes/login.personale'
 import { Route as LoginAdminRouteImport } from './routes/login.admin'
 import { Route as CheckoutSuccesRouteImport } from './routes/checkout.succes'
 import { Route as CheckoutAnnulleretRouteImport } from './routes/checkout.annulleret'
+import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
 import { Route as AppLogningRouteImport } from './routes/app.logning'
 import { Route as AppIndstillingerRouteImport } from './routes/app.indstillinger'
 import { Route as AppArkivRouteImport } from './routes/app.arkiv'
@@ -79,6 +82,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckinRoute = CheckinRouteImport.update({
+  id: '/checkin',
+  path: '/checkin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
@@ -98,6 +106,11 @@ const LoginIndexRoute = LoginIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => LoginRoute,
+} as any)
+const CheckinIndexRoute = CheckinIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CheckinRoute,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
@@ -129,6 +142,11 @@ const CheckoutAnnulleretRoute = CheckoutAnnulleretRouteImport.update({
   path: '/checkout/annulleret',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckinCodeRoute = CheckinCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => CheckinRoute,
+} as any)
 const AppLogningRoute = AppLogningRouteImport.update({
   id: '/logning',
   path: '/logning',
@@ -158,6 +176,7 @@ const AppAdminRoute = AppAdminRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/checkin': typeof CheckinRouteWithChildren
   '/login': typeof LoginRouteWithChildren
   '/priser': typeof PriserRoute
   '/privatlivspolitik': typeof PrivatlivspolitikRoute
@@ -172,12 +191,14 @@ export interface FileRoutesByFullPath {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app/': typeof AppIndexRoute
+  '/checkin/': typeof CheckinIndexRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
 }
@@ -195,12 +216,14 @@ export interface FileRoutesByTo {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app': typeof AppIndexRoute
+  '/checkin': typeof CheckinIndexRoute
   '/login': typeof LoginIndexRoute
   '/signup': typeof SignupIndexRoute
 }
@@ -208,6 +231,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/checkin': typeof CheckinRouteWithChildren
   '/login': typeof LoginRouteWithChildren
   '/priser': typeof PriserRoute
   '/privatlivspolitik': typeof PrivatlivspolitikRoute
@@ -222,12 +246,14 @@ export interface FileRoutesById {
   '/app/arkiv': typeof AppArkivRoute
   '/app/indstillinger': typeof AppIndstillingerRoute
   '/app/logning': typeof AppLogningRoute
+  '/checkin/$code': typeof CheckinCodeRoute
   '/checkout/annulleret': typeof CheckoutAnnulleretRoute
   '/checkout/succes': typeof CheckoutSuccesRoute
   '/login/admin': typeof LoginAdminRoute
   '/login/personale': typeof LoginPersonaleRoute
   '/signup/personale': typeof SignupPersonaleRoute
   '/app/': typeof AppIndexRoute
+  '/checkin/': typeof CheckinIndexRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
 }
@@ -236,6 +262,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/checkin'
     | '/login'
     | '/priser'
     | '/privatlivspolitik'
@@ -250,12 +277,14 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
     | '/app/'
+    | '/checkin/'
     | '/login/'
     | '/signup/'
   fileRoutesByTo: FileRoutesByTo
@@ -273,18 +302,21 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
     | '/app'
+    | '/checkin'
     | '/login'
     | '/signup'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/checkin'
     | '/login'
     | '/priser'
     | '/privatlivspolitik'
@@ -299,12 +331,14 @@ export interface FileRouteTypes {
     | '/app/arkiv'
     | '/app/indstillinger'
     | '/app/logning'
+    | '/checkin/$code'
     | '/checkout/annulleret'
     | '/checkout/succes'
     | '/login/admin'
     | '/login/personale'
     | '/signup/personale'
     | '/app/'
+    | '/checkin/'
     | '/login/'
     | '/signup/'
   fileRoutesById: FileRoutesById
@@ -312,6 +346,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  CheckinRoute: typeof CheckinRouteWithChildren
   LoginRoute: typeof LoginRouteWithChildren
   PriserRoute: typeof PriserRoute
   PrivatlivspolitikRoute: typeof PrivatlivspolitikRoute
@@ -390,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkin': {
+      id: '/checkin'
+      path: '/checkin'
+      fullPath: '/checkin'
+      preLoaderRoute: typeof CheckinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app': {
       id: '/app'
       path: '/app'
@@ -417,6 +459,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login/'
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof LoginRoute
+    }
+    '/checkin/': {
+      id: '/checkin/'
+      path: '/'
+      fullPath: '/checkin/'
+      preLoaderRoute: typeof CheckinIndexRouteImport
+      parentRoute: typeof CheckinRoute
     }
     '/app/': {
       id: '/app/'
@@ -459,6 +508,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/checkout/annulleret'
       preLoaderRoute: typeof CheckoutAnnulleretRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/checkin/$code': {
+      id: '/checkin/$code'
+      path: '/$code'
+      fullPath: '/checkin/$code'
+      preLoaderRoute: typeof CheckinCodeRouteImport
+      parentRoute: typeof CheckinRoute
     }
     '/app/logning': {
       id: '/app/logning'
@@ -518,6 +574,19 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface CheckinRouteChildren {
+  CheckinCodeRoute: typeof CheckinCodeRoute
+  CheckinIndexRoute: typeof CheckinIndexRoute
+}
+
+const CheckinRouteChildren: CheckinRouteChildren = {
+  CheckinCodeRoute: CheckinCodeRoute,
+  CheckinIndexRoute: CheckinIndexRoute,
+}
+
+const CheckinRouteWithChildren =
+  CheckinRoute._addFileChildren(CheckinRouteChildren)
+
 interface LoginRouteChildren {
   LoginAdminRoute: typeof LoginAdminRoute
   LoginPersonaleRoute: typeof LoginPersonaleRoute
@@ -548,6 +617,7 @@ const SignupRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  CheckinRoute: CheckinRouteWithChildren,
   LoginRoute: LoginRouteWithChildren,
   PriserRoute: PriserRoute,
   PrivatlivspolitikRoute: PrivatlivspolitikRoute,
@@ -563,12 +633,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

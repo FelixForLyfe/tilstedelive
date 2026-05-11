@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2, ScrollText, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Users, Tag, Activity as ActIcon, UserCog, Camera, Loader2, ScrollText, ShieldCheck, QrCode, Download, KeySquare, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/contexts/OrgContext";
 import { BarnDetalje } from "@/components/BarnDetalje";
 import { toast } from "sonner";
 import { useChildPhoto } from "@/lib/childPhoto";
+import { generateQrLocation, deleteQrLocation, setLocationPin, getOrgCheckins, exportCheckinsCSV, type QrLocation, type StaffCheckin } from "@/server/checkin.functions";
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/app/admin")({
   component: AdminSide,
 });
 
-type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog";
+type Tab = "boern" | "kategorier" | "aktiviteter" | "personale" | "auditlog" | "checkin";
 
 function AdminSide() {
   const { aktivOrgId, erAdmin, terms } = useOrg();
@@ -32,6 +33,7 @@ function AdminSide() {
     { id: "aktiviteter", label: cap(terms.aktiviteter), icon: ActIcon },
     { id: "personale", label: "Personale", icon: UserCog },
     { id: "auditlog", label: "Aktivitetslog", icon: ScrollText },
+    { id: "checkin", label: "Tjek ind", icon: QrCode },
   ];
 
   return (
@@ -55,6 +57,7 @@ function AdminSide() {
       {aktivOrgId && tab === "aktiviteter" && <AktivitetPanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "personale" && <PersonalePanel orgId={aktivOrgId} />}
       {aktivOrgId && tab === "auditlog" && <AuditLogPanel orgId={aktivOrgId} />}
+      {aktivOrgId && tab === "checkin" && <CheckinPanel orgId={aktivOrgId} />}
     </div>
   );
 }
@@ -685,6 +688,405 @@ function AuditLogPanel({ orgId }: { orgId: string }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ===== TJEK IND =====
+function QrCodeDisplay({ code, locationName }: { code: string; locationName: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    import("qrcode").then((QRCode) => {
+      QRCode.default
+        .toDataURL(`https://tilstede.live/checkin/${code}`, { width: 220, margin: 2 })
+        .then(setDataUrl);
+    });
+  }, [code]);
+
+  const downloadPng = () => {
+    if (!dataUrl) return;
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${locationName}-qr.png`;
+    a.click();
+  };
+
+  const downloadPdf = async () => {
+    const QRCode = await import("qrcode");
+    const url = `https://tilstede.live/checkin/${code}`;
+    const imgData = await QRCode.default.toDataURL(url, { width: 400, margin: 2 });
+    const { default: jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ unit: "mm", format: "a5" });
+    pdf.setFontSize(18);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(locationName, 74, 30, { align: "center" });
+    pdf.addImage(imgData, "PNG", 24, 40, 100, 100);
+    pdf.setFontSize(11);
+    pdf.setFont("helvetica", "normal");
+    pdf.text("Scan for at tjekke ind / ud", 74, 148, { align: "center" });
+    pdf.setFontSize(9);
+    pdf.setTextColor(120, 120, 120);
+    pdf.text(url, 74, 155, { align: "center" });
+    pdf.save(`${locationName}-tjek-ind.pdf`);
+  };
+
+  if (!dataUrl) return <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <img src={dataUrl} alt={`QR ${locationName}`} className="rounded-lg" width={110} height={110} />
+      <div className="flex gap-2">
+        <button onClick={downloadPng} className="flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+          <Download className="h-3 w-3" /> PNG
+        </button>
+        <button onClick={downloadPdf} className="flex items-center gap-1 rounded-lg bg-surface px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+          <Download className="h-3 w-3" /> PDF
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PinModal({ location, onClose, onSaved }: { location: QrLocation; onClose: () => void; onSaved: () => void }) {
+  const [pin, setPin] = useState("");
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    if (!/^\d{4,6}$/.test(pin)) { toast.error("PIN skal være 4-6 cifre."); return; }
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session udløbet.");
+      await setLocationPin({ data: { accessToken: session.access_token, locationId: location.id, pin } });
+      toast.success("PIN gemt.");
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke gemme PIN.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+      <div className="glass w-full max-w-sm rounded-2xl p-6 shadow-card">
+        <h3 className="font-display text-lg font-bold mb-1">Sæt PIN</h3>
+        <p className="text-sm text-muted-foreground mb-4">{location.location_name}</p>
+        <div className="relative">
+          <input
+            type={show ? "text" : "password"}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="4-6 cifre"
+            className="w-full rounded-xl border border-input bg-background px-4 py-2.5 font-mono text-xl tracking-widest focus:border-ring focus:outline-none pr-10"
+          />
+          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium">Annuller</button>
+          <button
+            onClick={handleSave}
+            disabled={loading || pin.length < 4}
+            className="flex-1 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Gem PIN"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckinPanel({ orgId }: { orgId: string }) {
+  const [subTab, setSubTab] = useState<"lokationer" | "oversigt">("lokationer");
+  const [locations, setLocations] = useState<QrLocation[]>([]);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [pinModal, setPinModal] = useState<QrLocation | null>(null);
+  const [checkins, setCheckins] = useState<StaffCheckin[]>([]);
+  const [checkinsLoading, setCheckinsLoading] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const loadLocations = useCallback(async () => {
+    const { data } = await (supabase as any)
+      .from("location_qr_codes")
+      .select("id, code, location_name, pin_hash, pin_updated_at, created_at")
+      .eq("organization_id", orgId)
+      .order("created_at");
+    setLocations((data ?? []) as QrLocation[]);
+  }, [orgId]);
+
+  const loadCheckins = useCallback(async () => {
+    setCheckinsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const result = await getOrgCheckins({
+        data: {
+          accessToken: session.access_token,
+          orgId,
+          from: fromDate ? new Date(fromDate).toISOString() : undefined,
+          to: toDate ? new Date(toDate + "T23:59:59").toISOString() : undefined,
+        },
+      });
+      setCheckins(result);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke hente tjek-ind oversigt.");
+    } finally {
+      setCheckinsLoading(false);
+    }
+  }, [orgId, fromDate, toDate]);
+
+  useEffect(() => { loadLocations(); }, [loadLocations]);
+  useEffect(() => { if (subTab === "oversigt") loadCheckins(); }, [subTab, loadCheckins]);
+
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session udløbet.");
+      await generateQrLocation({ data: { accessToken: session.access_token, orgId, locationName: newName.trim() } });
+      setNewName("");
+      loadLocations();
+      toast.success("Lokation oprettet.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke oprette lokation.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (loc: QrLocation) => {
+    if (!confirm(`Slet "${loc.location_name}"? Alle tjek-ind tilknyttet lokationen mister lokationsreferencen.`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session udløbet.");
+      await deleteQrLocation({ data: { accessToken: session.access_token, locationId: loc.id } });
+      loadLocations();
+      toast.success("Lokation slettet.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Kunne ikke slette lokation.");
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session udløbet.");
+      const { csv } = await exportCheckinsCSV({
+        data: {
+          accessToken: session.access_token,
+          orgId,
+          from: fromDate ? new Date(fromDate).toISOString() : undefined,
+          to: toDate ? new Date(toDate + "T23:59:59").toISOString() : undefined,
+        },
+      });
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tjek-ind-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Eksport fejlede.");
+    }
+  };
+
+  const fmtDuration = (inAt: string, outAt: string | null) => {
+    if (!outAt) return "—";
+    const min = Math.round((new Date(outAt).getTime() - new Date(inAt).getTime()) / 60000);
+    if (min < 60) return `${min} min`;
+    return `${Math.floor(min / 60)}t ${min % 60}m`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {(["lokationer", "oversigt"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setSubTab(t)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${subTab === t ? "bg-gradient-primary text-primary-foreground shadow-soft" : "bg-surface text-muted-foreground hover:text-foreground"}`}
+          >
+            {t === "lokationer" ? "QR-lokationer" : "Oversigt"}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "lokationer" && (
+        <div className="space-y-4">
+          <form onSubmit={handleCreate} className="flex gap-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Ny lokation (f.eks. Indgang)"
+              className="flex-1 rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:border-ring focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={creating || !newName.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+            >
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Opret
+            </button>
+          </form>
+
+          {locations.length === 0 && (
+            <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+              Ingen QR-lokationer endnu. Opret en ovenfor.
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {locations.map((loc) => (
+              <div key={loc.id} className="glass rounded-2xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{loc.location_name}</p>
+                    <p className="font-mono text-xs text-muted-foreground mt-0.5">{loc.code}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setPinModal(loc)}
+                      title="Sæt PIN"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-muted-foreground hover:text-foreground"
+                    >
+                      <KeySquare className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(loc)}
+                      title="Slet"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {loc.pin_hash ? (
+                    <span className="flex items-center gap-1 text-success"><CheckCircle2 className="h-3 w-3" /> PIN opsat</span>
+                  ) : (
+                    <span className="text-amber-500">Ingen PIN</span>
+                  )}
+                </div>
+
+                <QrCodeDisplay code={loc.code} locationName={loc.location_name} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {subTab === "oversigt" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Fra</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Til</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={loadCheckins}
+              className="rounded-xl bg-surface px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Hent
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow"
+            >
+              <Download className="h-4 w-4" /> Eksporter CSV
+            </button>
+          </div>
+
+          {checkinsLoading && (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!checkinsLoading && checkins.length === 0 && (
+            <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+              Ingen tjek-ind registreret for den valgte periode.
+            </div>
+          )}
+
+          {!checkinsLoading && checkins.length > 0 && (
+            <div className="glass overflow-hidden rounded-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                      <th className="px-4 py-3">Navn</th>
+                      <th className="px-4 py-3">Lokation</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Tjek ind</th>
+                      <th className="px-4 py-3">Tjek ud</th>
+                      <th className="px-4 py-3">Varighed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {checkins.map((c) => (
+                      <tr key={c.id} className="hover:bg-surface/50">
+                        <td className="px-4 py-3 font-medium">{c.user?.full_name ?? c.user?.email ?? "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{c.location?.location_name ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium">
+                            {c.checkin_type === "qr" ? "QR" : "PIN"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {new Date(c.checked_in_at).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {c.checked_out_at
+                            ? new Date(c.checked_out_at).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                            : <span className="text-success text-xs font-medium">Aktiv</span>}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{fmtDuration(c.checked_in_at, c.checked_out_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {pinModal && (
+        <PinModal
+          location={pinModal}
+          onClose={() => setPinModal(null)}
+          onSaved={loadLocations}
+        />
       )}
     </div>
   );

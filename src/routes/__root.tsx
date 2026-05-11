@@ -2,6 +2,7 @@ import { Outlet, createRootRoute, HeadContent, Scripts, Link } from "@tanstack/r
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OrgProvider } from "@/contexts/OrgContext";
+import { FeatureFlagsProvider } from "@/contexts/FeatureFlagsContext";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { CookieBanner } from "@/components/CookieBanner";
@@ -80,10 +81,12 @@ function RootComponent() {
   return (
     <AuthProvider>
       <OrgProvider>
-        <Outlet />
-        <Toaster richColors position="top-center" />
-        <InstallPrompt />
-        <CookieBanner />
+        <FeatureFlagsProvider>
+          <Outlet />
+          <Toaster richColors position="top-center" />
+          <InstallPrompt />
+          <CookieBanner />
+        </FeatureFlagsProvider>
       </OrgProvider>
     </AuthProvider>
   );
