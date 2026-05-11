@@ -140,7 +140,8 @@ function AktivitetPanel({ orgId }: { orgId: string }) {
     indlaes();
   };
   const toggle = async (a: any) => {
-    await supabase.from("activities").update({ is_active: !a.is_active }).eq("id", a.id);
+    const { error } = await supabase.from("activities").update({ is_active: !a.is_active }).eq("id", a.id);
+    if (error) { toast.error(error.message); return; }
     indlaes();
   };
 

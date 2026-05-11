@@ -108,6 +108,7 @@ function ArkivSide() {
   };
 
   const eksporterPDF = async (log: DagligLog) => {
+    try {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const orgNavn = aktivOrg?.organizations?.name ?? "Organisation";
     const margin = 40;
@@ -214,6 +215,9 @@ function ArkivSide() {
     }
 
     doc.save(`daglig-log-${log.date}.pdf`);
+    } catch (err: any) {
+      toast.error("PDF kunne ikke genereres: " + (err?.message ?? "ukendt fejl"));
+    }
   };
 
   return (
