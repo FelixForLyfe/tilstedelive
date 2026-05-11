@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard } from "lucide-react";
+import { Home, Activity, Clock, ShieldCheck, Archive, LogOut, Sparkles, ChevronDown, ChevronRight, CreditCard, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -151,6 +151,7 @@ function AppLayout() {
     ...(erAdmin ? [
       { to: "/app/arkiv", label: "Arkiv", icon: Archive },
       { to: "/app/admin", label: "Admin", icon: ShieldCheck },
+      { to: "/app/indstillinger", label: "Indstillinger", icon: Settings },
     ] : []),
   ];
 
@@ -255,7 +256,7 @@ function AppLayout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/90 backdrop-blur-xl">
-        <div className="container mx-auto grid max-w-2xl grid-cols-5 gap-1 px-2 py-2">
+        <div className={`container mx-auto grid max-w-2xl gap-1 px-2 py-2`} style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}>
           {navItems.map((it) => {
             const Icon = it.icon;
             const aktiv = erAktiv(it.to, it.exact);

@@ -436,7 +436,7 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
 
     const { data: keys, error } = await (supabaseAdmin as any)
       .from("plan_keys")
-      .select("id, code, plan_type, used, used_at, created_at, used_by, organizations(name)")
+      .select("id, code, plan_type, label, used, used_at, created_at, used_by, organizations(name)")
       .order("created_at", { ascending: false });
 
     // Table missing — migration 20260509200000 not yet applied
@@ -447,6 +447,7 @@ export const superadminListPlanKeys = createServerFn({ method: "POST" })
       id: k.id as string,
       code: k.code as string,
       planType: k.plan_type as string,
+      label: (k.label ?? null) as string | null,
       used: k.used as boolean,
       usedAt: k.used_at as string | null,
       usedByOrgName: k.organizations?.name as string | null,
@@ -497,6 +498,48 @@ export const superadminGeneratePlanKey = createServerFn({ method: "POST" })
 
     await auditLog(user.id, "SUPERADMIN_GENERATE_KEY", null, { code, plan_type: data.planType });
     return { code };
+  });
+
+// ─── Update plan key ─────────────────────────────────────────────────────────
+
+export const superadminUpdatePlanKey = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z.object({
+      accessToken: z.string().min(1),
+      keyId: z.string().uuid(),
+      planType: z.enum(KEY_PLAN_TYPES),
+      label: z.string().trim().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+    const { error } = await (supabaseAdmin as any)
+      .from("plan_keys")
+      .update({ plan_type: data.planType, label: data.label ?? null })
+      .eq("id", data.keyId);
+    if (error) throw new Error(error.message);
+    await auditLog(admin.id, "SUPERADMIN_UPDATE_KEY", null, { key_id: data.keyId, plan_type: data.planType });
+    return { success: true };
+  });
+
+// ─── Delete plan key ──────────────────────────────────────────────────────────
+
+export const superadminDeletePlanKey = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z.object({
+      accessToken: z.string().min(1),
+      keyId: z.string().uuid(),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const admin = await verifySuperadmin(data.accessToken);
+    const { error } = await (supabaseAdmin as any)
+      .from("plan_keys")
+      .delete()
+      .eq("id", data.keyId);
+    if (error) throw new Error(error.message);
+    await auditLog(admin.id, "SUPERADMIN_DELETE_KEY", null, { key_id: data.keyId });
+    return { success: true };
   });
 
 // ─── List superadmin audit log ────────────────────────────────────────────────
