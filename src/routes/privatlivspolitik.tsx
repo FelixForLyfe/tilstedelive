@@ -42,39 +42,33 @@ const rettigheder = [
   {
     icon: FileText,
     titel: "Indsigt (art. 15)",
-    tekst:
-      "Du kan til enhver tid anmode om en kopi af de personoplysninger, vi behandler om dig.",
+    tekst: "Du kan til enhver tid anmode om en kopi af de personoplysninger, vi behandler om dig.",
   },
   {
     icon: UserCheck,
     titel: "Berigtigelse (art. 16)",
-    tekst:
-      "Du kan få urigtige eller ufuldstændige oplysninger om dig selv rettet.",
+    tekst: "Du kan få urigtige eller ufuldstændige oplysninger om dig selv rettet.",
   },
   {
     icon: Trash2,
     titel: "Sletning (art. 17)",
-    tekst:
-      "Du kan anmode om at få dine oplysninger slettet, når de ikke længere er nødvendige. Brug vores",
-    link: { tekst: "sletsidelink", href: "/slet-data" },
+    tekst: "Du kan anmode om at få dine oplysninger slettet, når de ikke længere er nødvendige.",
+    link: { href: "/slet-data" },
   },
   {
     icon: Lock,
     titel: "Begrænsning (art. 18)",
-    tekst:
-      "Du kan kræve at behandlingen af dine oplysninger begrænses, mens en tvist afklares.",
+    tekst: "Du kan kræve at behandlingen af dine oplysninger begrænses, mens en tvist afklares.",
   },
   {
     icon: Database,
     titel: "Dataportabilitet (art. 20)",
-    tekst:
-      "Du kan modtage dine oplysninger i et struktureret, maskinlæsbart format og overføre dem til en anden tjeneste.",
+    tekst: "Du kan modtage dine oplysninger i et struktureret, maskinlæsbart format.",
   },
   {
     icon: MessageSquare,
     titel: "Indsigelse (art. 21)",
-    tekst:
-      "Du kan gøre indsigelse mod behandling af dine oplysninger, der er baseret på legitim interesse.",
+    tekst: "Du kan gøre indsigelse mod behandling baseret på legitim interesse.",
   },
 ];
 
@@ -99,13 +93,13 @@ const cookies = [
   {
     navn: "sb-*-auth-token",
     type: "Nødvendig",
-    formål: "Supabase login-session. Holder dig logget ind.",
+    formål: "Supabase login-session — holder dig logget ind og validerer din identitet ved API-kald.",
     levetid: "Sessionbaseret / op til 7 dage",
   },
   {
     navn: "tilstede.aktivOrgId",
     type: "Nødvendig",
-    formål: "Husker hvilken organisation du sidst arbejdede i. Gemmes i localStorage (ikke en cookie).",
+    formål: "Husker hvilken organisation du sidst arbejdede i. Gemmes i localStorage.",
     levetid: "Indtil browseren ryddes",
   },
   {
@@ -117,7 +111,7 @@ const cookies = [
   {
     navn: "tilstede:install-dismissed",
     type: "Præference",
-    formål: "Husker at du har afvist installationsforslaget for appen.",
+    formål: "Husker at du har afvist installationsforslaget (PWA-prompt).",
     levetid: "Indtil browseren ryddes",
   },
 ];
@@ -149,7 +143,6 @@ function AfsnitsKort({
 function PrivatlivsSide() {
   return (
     <div className="min-h-screen">
-      {/* ── Header ── */}
       <header className="container mx-auto flex items-center justify-between px-6 py-6">
         <Link to="/" className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
@@ -158,28 +151,14 @@ function PrivatlivsSide() {
           <span className="font-display text-xl font-bold tracking-tight">Tilstede</span>
         </Link>
         <div className="flex flex-wrap gap-2">
-          <Link
-            to="/sikkerhed"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Sikkerhed
-          </Link>
-          <Link
-            to="/login/personale"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Personale
-          </Link>
-          <Link
-            to="/signup"
-            className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
-          >
-            Opret organisation
+          <Link to="/sikkerhed" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Sikkerhed</Link>
+          <Link to="/login/personale" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Log ind</Link>
+          <Link to="/signup" search={{ plan: undefined }} className="rounded-lg bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90">
+            Start gratis
           </Link>
         </div>
       </header>
 
-      {/* ── Hero ── */}
       <section className="container mx-auto px-6 py-14 text-center fade-in">
         <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-3 py-1 text-xs text-muted-foreground">
           <ScrollText className="h-3.5 w-3.5 text-primary" />
@@ -189,27 +168,27 @@ function PrivatlivsSide() {
           Privatlivs&shy;politik
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-          Tilstede behandler personoplysninger med respekt for din privatlivs­ret. Her forklarer vi
+          Tilstede behandler personoplysninger med respekt for din privatlivsret. Her forklarer vi
           præcist hvilke data vi indsamler, hvorfor vi gør det, og hvad du kan kræve af os.
         </p>
       </section>
 
-      {/* ── Sections grid ── */}
       <div className="container mx-auto grid gap-4 px-6 pb-10 md:grid-cols-2">
 
         {/* 1 — Dataansvarlig */}
         <AfsnitsKort icon={Building2} titel="1. Dataansvarlig">
-          <p>
-            Den dataansvarlige for behandling af personoplysninger i Tilstede er:
-          </p>
+          <p>Den dataansvarlige for behandling af personoplysninger i Tilstede er:</p>
           <div className="rounded-xl bg-surface/50 p-4 font-mono text-xs text-foreground">
-            <p className="font-semibold not-italic font-sans text-sm">Tilstede</p>
-            <p className="mt-1">E-mail: <a href="mailto:support@tilstede.live" className="text-primary hover:underline">support@tilstede.live</a></p>
+            <p className="not-italic font-sans text-sm font-semibold">FPH</p>
+            <p className="mt-1">CVR: 43252771</p>
+            <p>Violvej 11, 1 · 4900 Nakskov</p>
+            <p>E-mail: <a href="mailto:support@tilstede.live" className="text-primary hover:underline">support@tilstede.live</a></p>
           </div>
           <p>
-            Bemærk: Institutioner der opretter en organisation i Tilstede er selvstændigt data­ansvarlige
-            for de børne- og personaleopplysninger de registrerer. Tilstede er i den forbindelse
-            databehandler på institutionens vegne.
+            Institutioner og virksomheder der opretter en organisation i Tilstede er selvstændigt
+            dataansvarlige for de oplysninger de registrerer om børn, medlemmer og medarbejdere.
+            Tilstede handler i den forbindelse som databehandler på kundens vegne og leverer
+            databehandleraftale på anmodning.
           </p>
         </AfsnitsKort>
 
@@ -217,22 +196,32 @@ function PrivatlivsSide() {
         <AfsnitsKort icon={Database} titel="2. Hvilke personoplysninger behandler vi?">
           <p className="font-medium text-foreground">Brugerkontodata (medarbejdere og admins):</p>
           <ul className="ml-4 list-disc space-y-1">
-            <li>E-mailadresse (bruges til login og kommunikation)</li>
-            <li>Visningsnavn (vises for kollegaer i samme organisation)</li>
+            <li>E-mailadresse (bruges til login og invitationer)</li>
+            <li>Visningsnavn / fulde navn</li>
             <li>Login-tidspunkter og sessionstokens (via Supabase Auth)</li>
+            <li>To-faktor-autentifikationsnøgle (TOTP-seed, krypteret), hvis aktiveret</li>
           </ul>
-          <p className="font-medium text-foreground">Børneoplysninger (behandlet på institutionens vegne):</p>
+          <p className="font-medium text-foreground">Fremmøde og tjek-ind (på kundens vegne):</p>
           <ul className="ml-4 list-disc space-y-1">
-            <li>Fulde navn, CPR-nummer, adresse</li>
-            <li>Forældrenes kontaktoplysninger og lægeoplysninger</li>
+            <li>Tjek-ind og tjek-ud tidsstempler pr. medarbejder</li>
+            <li>Lokation for tjek-ind (via QR-kode eller PIN)</li>
+            <li>Vagtplan: vagttider, roller, tildelte medarbejdere</li>
+            <li>Fremmøde på åbne og tildelte vagter</li>
+            <li>Bytteaftaler, fraværsmeldinger og timebanksaldo</li>
+          </ul>
+          <p className="font-medium text-foreground">Børne- og deltageropplysninger (på kundens vegne):</p>
+          <ul className="ml-4 list-disc space-y-1">
+            <li>Fulde navn, CPR-nummer, adresse (valgfrit)</li>
+            <li>Forældrenes kontaktoplysninger og lægeoplysninger (valgfrit)</li>
             <li>Allergier og særlige noter</li>
             <li>Fremmøderegistreringer og aktivitetstildelinger</li>
-            <li>Profilbillede (valgfrit, opbevares i privat lager)</li>
+            <li>Profilbillede (valgfrit, privat lager)</li>
           </ul>
-          <p className="font-medium text-foreground">Driftsdata:</p>
+          <p className="font-medium text-foreground">Systemdata:</p>
           <ul className="ml-4 list-disc space-y-1">
-            <li>Personalets arbejdstidsregistreringer</li>
-            <li>Daglige arkiv-snapshots (luk-dag-funktion)</li>
+            <li>Dag-snapshots ved luk-dag (arkiv)</li>
+            <li>QR-lokationer og bcrypt-hashede PIN-koder</li>
+            <li>Betainteressetilmeldinger (navn, e-mail, organisationstype)</li>
           </ul>
         </AfsnitsKort>
 
@@ -240,26 +229,34 @@ function PrivatlivsSide() {
         <AfsnitsKort icon={Scale} titel="3. Formål og retsgrundlag">
           <div className="space-y-3">
             <div className="rounded-xl bg-surface/50 p-3">
-              <p className="font-medium text-foreground">Brugerkonti</p>
+              <p className="font-medium text-foreground">Brugerkonti og login</p>
               <p className="mt-1">
-                Formål: At oprette og administrere din adgang til Tilstede.<br />
+                Formål: Oprette og administrere din adgang til Tilstede.<br />
                 Retsgrundlag: Opfyldelse af aftale (GDPR art. 6, stk. 1, litra b).
               </p>
             </div>
             <div className="rounded-xl bg-surface/50 p-3">
-              <p className="font-medium text-foreground">Børne- og personaleopplysninger</p>
+              <p className="font-medium text-foreground">Fremmøde, tjek-ind og vagtplan</p>
               <p className="mt-1">
-                Formål: At levere fremmøde-, aktivitets- og tidsregistrerings­funktioner til institutionen.<br />
-                Retsgrundlag: Opfyldelse af aftale med den dataansvarlige institution (art. 6, stk. 1, litra b) samt
-                eventuel retlig forpligtelse (art. 6, stk. 1, litra c).
+                Formål: Levere fremmøde-, tjek-ind- og vagtplanfunktioner til kunden.<br />
+                Retsgrundlag: Opfyldelse af aftale med den dataansvarlige kunde (art. 6, stk. 1, litra b)
+                samt eventuel retlig forpligtelse (art. 6, stk. 1, litra c).
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface/50 p-3">
+              <p className="font-medium text-foreground">Betainteresse-tilmeldinger</p>
+              <p className="mt-1">
+                Formål: Kontakte interesserede virksomheder og institutioner forud for lancering.<br />
+                Retsgrundlag: Samtykke (art. 6, stk. 1, litra a) — afgivet ved indsendelse af formularen.
+                Slettes på anmodning.
               </p>
             </div>
             <div className="rounded-xl bg-surface/50 p-3">
               <p className="font-medium text-foreground">Cookies og localStorage</p>
               <p className="mt-1">
-                Formål: At holde dig logget ind og huske dine præferencer.<br />
-                Retsgrundlag: Berettiget interesse (nødvendige cookies, art. 6, stk. 1, litra f) og samtykke
-                (præference-cookies, art. 6, stk. 1, litra a).
+                Formål: Holde dig logget ind og huske dine præferencer.<br />
+                Retsgrundlag: Berettiget interesse (nødvendige, art. 6, stk. 1, litra f) og
+                samtykke (præference, art. 6, stk. 1, litra a).
               </p>
             </div>
           </div>
@@ -268,8 +265,8 @@ function PrivatlivsSide() {
         {/* 4 — Tredjeparter */}
         <AfsnitsKort icon={ServerCog} titel="4. Databehandlere og tredjeparter">
           <p>
-            Vi deler ikke dine oplysninger med tredjeparter til kommercielle formål. Vi anvender
-            følgende databehandlere til at levere tjenesten:
+            Vi deler ikke dine oplysninger med tredjeparter til kommercielle formål.
+            Vi anvender følgende databehandlere til at levere tjenesten:
           </p>
           <div className="space-y-2">
             {tredjeparter.map((p) => (
@@ -291,7 +288,7 @@ function PrivatlivsSide() {
             ))}
           </div>
           <p>
-            Begge leverandører opbevarer data i EU og har indgået databehandler­aftaler med
+            Begge leverandører opbevarer data i EU og har indgået databehandleraftaler med
             Tilstede i overensstemmelse med GDPR kapitel V.
           </p>
         </AfsnitsKort>
@@ -302,39 +299,43 @@ function PrivatlivsSide() {
             <div className="rounded-xl bg-surface/50 p-3">
               <p className="font-medium text-foreground">Brugerkontodata</p>
               <p className="mt-0.5">
-                Opbevares så længe din konto er aktiv. Slettes inden for 30 dage efter anmodning om
-                kontosletning.
+                Opbevares så længe kontoen er aktiv. Slettes inden for 30 dage efter anmodning.
               </p>
             </div>
             <div className="rounded-xl bg-surface/50 p-3">
-              <p className="font-medium text-foreground">Børne- og personaleopplysninger</p>
+              <p className="font-medium text-foreground">Tjek-ind og vagtplandata</p>
               <p className="mt-0.5">
-                Opbevares af institutionen efter eget valg. Admin kan til enhver tid slette enkelt­poster
-                eller hele organisationens data. Tilstede sletter automatisk al data tilhørende en
-                organisation, hvis den slettes.
+                Opbevares af kunden efter eget valg. Admin kan slette enkeltposter eller alle data.
+                Tilstede sletter automatisk al data, hvis organisationen slettes.
               </p>
             </div>
             <div className="rounded-xl bg-surface/50 p-3">
-              <p className="font-medium text-foreground">Arkiv­snapshots (dag-luk)</p>
+              <p className="font-medium text-foreground">Dag-snapshots (arkiv)</p>
               <p className="mt-0.5">
-                Opbevares indtil admin sletter dem manuelt. Snapshots kan ikke genskabes efter sletning.
+                Opbevares indtil admin sletter dem. Kan ikke genskabes efter sletning.
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface/50 p-3">
+              <p className="font-medium text-foreground">Betainteresse-tilmeldinger</p>
+              <p className="mt-0.5">
+                Opbevares til lancering og slettes herefter, med mindre du aktivt opretter en konto.
+                Send sletningsanmodning til support@tilstede.live.
               </p>
             </div>
           </div>
           <p>
-            Du kan til enhver tid anmode om sletning af dine egne oplysninger via vores{" "}
+            Du kan til enhver tid anmode om sletning via vores{" "}
             <Link to="/slet-data" className="text-primary hover:underline">
               side for datasletning
-            </Link>
-            .
+            </Link>.
           </p>
         </AfsnitsKort>
 
         {/* 6 — Cookies */}
         <AfsnitsKort icon={Cookie} titel="6. Cookies og lokal lagring">
           <p>
-            Tilstede bruger udelukkende teknisk nødvendige og præference-cookies. Vi bruger
-            ingen sporings-, reklame- eller analyse-cookies.
+            Tilstede bruger udelukkende teknisk nødvendige og præferencecookies.
+            Vi bruger ingen sporings-, reklame- eller analysecookies.
           </p>
           <div className="space-y-2">
             {cookies.map((c) => (
@@ -357,12 +358,12 @@ function PrivatlivsSide() {
             ))}
           </div>
           <p>
-            Du kan til enhver tid ændre dit cookievalg ved at rydde dine browser­data eller kontakte os.
+            Du kan til enhver tid ændre dit cookievalg ved at rydde dine browserdata eller kontakte os.
           </p>
         </AfsnitsKort>
       </div>
 
-      {/* ── Rettigheder ── */}
+      {/* Rettigheder */}
       <section className="container mx-auto px-6 pb-10">
         <div className="glass rounded-3xl p-8 md:p-10">
           <div className="flex items-center gap-3">
@@ -372,8 +373,7 @@ function PrivatlivsSide() {
             <h2 className="font-display text-2xl font-bold">7. Dine rettigheder</h2>
           </div>
           <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
-            Som registreret har du en række rettigheder under GDPR. Du udøver dem ved at kontakte os
-            på{" "}
+            Som registreret har du en række rettigheder under GDPR. Du udøver dem ved at kontakte os på{" "}
             <a href="mailto:support@tilstede.live" className="text-primary hover:underline">
               support@tilstede.live
             </a>
@@ -381,10 +381,7 @@ function PrivatlivsSide() {
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {rettigheder.map((r) => (
-              <div
-                key={r.titel}
-                className="flex items-start gap-3 rounded-xl bg-surface/40 p-4 text-sm"
-              >
+              <div key={r.titel} className="flex items-start gap-3 rounded-xl bg-surface/40 p-4 text-sm">
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15">
                   <r.icon className="h-4 w-4 text-primary" />
                 </div>
@@ -396,9 +393,8 @@ function PrivatlivsSide() {
                       <>
                         {" "}
                         <Link to={r.link.href as any} className="text-primary hover:underline">
-                          side for datasletning
-                        </Link>
-                        .
+                          Se side for datasletning
+                        </Link>.
                       </>
                     )}
                   </p>
@@ -409,7 +405,7 @@ function PrivatlivsSide() {
         </div>
       </section>
 
-      {/* ── Klage & kontakt ── */}
+      {/* Klage & kontakt */}
       <section className="container mx-auto grid gap-4 px-6 pb-10 md:grid-cols-2">
         <div className="glass rounded-2xl p-6">
           <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-soft">
@@ -417,29 +413,19 @@ function PrivatlivsSide() {
           </div>
           <h3 className="text-lg font-semibold">Klage til Datatilsynet</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Du har ret til at klage til den kompetente tilsynsmyndighed, hvis du mener, at vi
-            behandler dine personoplysninger i strid med databeskyttelseslovgivningen.
+            Du har ret til at klage til Datatilsynet, hvis du mener at vi behandler dine
+            personoplysninger i strid med databeskyttelseslovgivningen.
           </p>
           <div className="mt-4 rounded-xl bg-surface/50 p-3 text-xs text-muted-foreground space-y-1">
             <p className="font-semibold text-foreground">Datatilsynet</p>
             <p>Carl Jacobsens Vej 35, 2500 Valby</p>
-            <p>
-              <a href="mailto:dt@datatilsynet.dk" className="text-primary hover:underline">
-                dt@datatilsynet.dk
-              </a>
-            </p>
+            <p><a href="mailto:dt@datatilsynet.dk" className="text-primary hover:underline">dt@datatilsynet.dk</a></p>
             <p>Tlf.: +45 33 19 32 00</p>
-            <a
-              href="https://www.datatilsynet.dk"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
+            <a href="https://www.datatilsynet.dk" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
               www.datatilsynet.dk <ChevronRight className="h-3 w-3" />
             </a>
           </div>
         </div>
-
         <div className="glass rounded-2xl p-6">
           <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-soft">
             <ScrollText className="h-5 w-5" />
@@ -451,29 +437,21 @@ function PrivatlivsSide() {
             politikken sidst blev revideret.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Væsentlige ændringer varsles via e-mail til registrerede brugere mindst 14 dage inden
-            ikrafttræden.
+            Væsentlige ændringer varsles via e-mail til registrerede brugere mindst 14 dage inden ikrafttræden.
           </p>
         </div>
       </section>
 
-      {/* ── CTA ── */}
       <section className="container mx-auto px-6 pb-24 text-center">
         <h2 className="font-display text-2xl font-bold">Spørgsmål om dine data?</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
           Skriv til os, og vi vender tilbage inden for 2 hverdage.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <a
-            href="mailto:support@tilstede.live"
-            className="rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:scale-[1.02]"
-          >
+          <a href="mailto:support@tilstede.live" className="rounded-xl bg-gradient-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
             Kontakt support
           </a>
-          <Link
-            to="/slet-data"
-            className="rounded-xl border border-border bg-surface px-6 py-3 font-semibold transition hover:bg-surface-elevated"
-          >
+          <Link to="/slet-data" className="rounded-xl border border-border bg-surface px-6 py-3 font-semibold transition hover:bg-surface-elevated">
             Anmod om datasletning
           </Link>
         </div>
@@ -485,7 +463,7 @@ function PrivatlivsSide() {
           <Link to="/sikkerhed" className="hover:text-foreground">Sikkerhed</Link>
           <Link to="/slet-data" className="hover:text-foreground">Slet mine data</Link>
         </div>
-        <p className="mt-3">Tilstede © {new Date().getFullYear()} — bygget til danske institutioner.</p>
+        <p className="mt-3">Tilstede © {new Date().getFullYear()} — bygget til danske organisationer.</p>
         <p className="mt-2 text-[10px] opacity-50">Tilstede er udviklet og drevet af FPH · CVR: 43252771 · Violvej 11, 1 - 4900 Nakskov · support@tilstede.live</p>
       </footer>
     </div>

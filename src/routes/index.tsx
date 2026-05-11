@@ -1,6 +1,8 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Accordion from "@radix-ui/react-accordion";
+import { useServerFn } from "@tanstack/react-start";
+import { submitBetaSignup } from "@/server/beta.functions";
 import {
   CheckCircle2,
   ChevronDown,
@@ -11,7 +13,6 @@ import {
   Shield,
   Clock,
   Zap,
-  Star,
   Users,
   QrCode,
   Calendar,
@@ -367,25 +368,205 @@ function Hero() {
   );
 }
 
-// ─── Social proof bar ─────────────────────────────────────────────────────────
+// ─── Beta / Early adopter signup ──────────────────────────────────────────────
 
-function SocialProofBar() {
+const ORG_TYPES = [
+  { value: "sfo", label: "🏫 Skole / SFO / Daginstitution" },
+  { value: "forening", label: "⚽ Forening / Sportsklub" },
+  { value: "butik", label: "🏪 Butik / Virksomhed" },
+  { value: "andet", label: "🏢 Andet" },
+] as const;
+
+type BetaState = "idle" | "submitting" | "done" | "error";
+
+function BetaSignupSection() {
+  const doSubmit = useServerFn(submitBetaSignup);
+  const { ref, inView } = useInView();
+  const [state, setState] = useState<BetaState>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    org_type: "sfo" as "sfo" | "forening" | "butik" | "andet",
+    org_name: "",
+    role: "",
+    message: "",
+  });
+
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name || !form.email) return;
+    setState("submitting");
+    setErrorMsg("");
+    try {
+      await doSubmit({
+        data: {
+          name: form.name,
+          email: form.email,
+          org_type: form.org_type,
+          org_name: form.org_name || undefined,
+          role: form.role || undefined,
+          message: form.message || undefined,
+        },
+      });
+      setState("done");
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Noget gik galt. Prøv igen.");
+      setState("error");
+    }
+  };
+
   return (
-    <section className="border-y border-border/50 bg-surface/30 py-10">
+    <section className="border-y border-border/50 bg-surface/20 py-20 md:py-28">
       <div className="mx-auto max-w-7xl px-6">
-        <p className="mb-8 text-center text-sm font-medium text-muted-foreground">
-          Bruges af institutioner og virksomheder i hele Danmark
-        </p>
-        {/* <!-- Replace with real customer logos --> */}
-        <div className="flex flex-wrap items-center justify-center gap-6">
-          {["Din logo her", "Din logo her", "Din logo her", "Din logo her", "Din logo her"].map((t, i) => (
-            <div
-              key={i}
-              className="flex h-14 w-36 items-center justify-center rounded-xl border border-border/50 bg-surface/60 text-[11px] text-muted-foreground/50"
-            >
-              {t}
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+
+          {/* Left — pitch */}
+          <div
+            ref={ref}
+            className={`transition-all duration-700 ${inView ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-8"}`}
+          >
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+              🚀 Vi er i gang — bliv en af de første
             </div>
-          ))}
+            <h2 className="font-display text-3xl font-bold sm:text-4xl">
+              Vil du være med til<br />
+              <span className="bg-gradient-primary bg-clip-text text-transparent">at forme Tilstede?</span>
+            </h2>
+            <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+              Vi er nye og har endnu ingen kunder — og det er præcis derfor vi søger
+              <strong className="text-foreground"> dig</strong>. Bliv pilotbruger og få:
+            </p>
+            <ul className="mt-5 space-y-3">
+              {[
+                { emoji: "🆓", text: "6 måneder gratis adgang til Pro-planen" },
+                { emoji: "🎯", text: "Direkte indflydelse på hvilke funktioner vi bygger" },
+                { emoji: "🇩🇰", text: "Personlig onboarding på dansk — vi hjælper dig i gang" },
+                { emoji: "⭐", text: "For evigt rabat som early adopter, når vi lancerer fuldt" },
+              ].map((item) => (
+                <li key={item.text} className="flex items-start gap-3 text-sm">
+                  <span className="text-xl leading-tight">{item.emoji}</span>
+                  <span className="text-foreground/90">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-6 text-sm text-muted-foreground">
+              Vi kontakter dig inden for 48 timer. Ingen forpligtelse.
+            </p>
+          </div>
+
+          {/* Right — form */}
+          <div
+            className={`transition-all duration-700 delay-200 ${inView ? "opacity-100 translate-x-0" : "opacity-0 translate-x-8"}`}
+          >
+            {state === "done" ? (
+              <div className="glass rounded-3xl p-8 text-center">
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-success/15 text-4xl">
+                  🎉
+                </div>
+                <h3 className="font-display text-2xl font-bold">Tak — vi glæder os!</h3>
+                <p className="mt-3 text-muted-foreground">
+                  Vi har modtaget din tilmelding og kontakter dig inden for 48 timer.
+                </p>
+                <p className="mt-5 text-sm font-semibold text-primary">
+                  Velkommen ombord, {form.name.split(" ")[0]}!
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={submit} className="glass rounded-3xl p-6 sm:p-8 space-y-4">
+                <h3 className="font-display text-xl font-bold">Ja tak, jeg vil testes!</h3>
+                <p className="text-sm text-muted-foreground">
+                  Udfyld formularen — vi er i kontakt inden for 48 timer.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Dit navn *</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => set("name", e.target.value)}
+                      placeholder="Mads Hansen"
+                      required
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">E-mail *</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => set("email", e.target.value)}
+                      placeholder="mads@sfo.dk"
+                      required
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Din type organisation *</label>
+                    <select
+                      value={form.org_type}
+                      onChange={(e) => set("org_type", e.target.value as any)}
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    >
+                      {ORG_TYPES.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Navn på organisation</label>
+                    <input
+                      type="text"
+                      value={form.org_name}
+                      onChange={(e) => set("org_name", e.target.value)}
+                      placeholder="Nakskov SFO"
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Din rolle</label>
+                    <input
+                      type="text"
+                      value={form.role}
+                      onChange={(e) => set("role", e.target.value)}
+                      placeholder="Leder, frivillig, ejer…"
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Hvad er dit største problem med fremmøde i dag? (valgfrit)</label>
+                    <textarea
+                      value={form.message}
+                      onChange={(e) => set("message", e.target.value)}
+                      rows={3}
+                      placeholder="Vi bruger Excel og det er et rod…"
+                      className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:border-ring focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {state === "error" && (
+                  <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {errorMsg}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={state === "submitting" || !form.name || !form.email}
+                  className="w-full rounded-xl bg-gradient-primary py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {state === "submitting" ? "Sender…" : "Tilmeld mig som pilotbruger →"}
+                </button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Vi deler aldrig dine oplysninger med tredjeparter.
+                </p>
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -707,81 +888,7 @@ function StatsBar() {
   );
 }
 
-// ─── Testimonials ─────────────────────────────────────────────────────────────
-
-const TESTIMONIALS = [
-  {
-    quote: "Vi bruger ikke mere tid på at tælle børn manuelt. Tilstede gør det hele for os — og vi kan se det på telefonen.",
-    name: "[Navn]",
-    title: "SFO-leder",
-    org: "[Institution]",
-    stars: 5,
-  },
-  {
-    quote: "Endelig et system der er enkelt nok til at alle vores frivillige kan bruge det.",
-    name: "[Navn]",
-    title: "Formand",
-    org: "[Sportsklub]",
-    stars: 5,
-  },
-  {
-    quote: "Vagtplanen er nu delt med alle på 2 minutter. Det er sgu meget bedre end WhatsApp.",
-    name: "[Navn]",
-    title: "Butikschef",
-    org: "[Virksomhed]",
-    stars: 5,
-  },
-];
-// <!-- Replace with real testimonials ASAP -->
-
-function Testimonials() {
-  const { ref, inView } = useInView();
-  return (
-    <section className="py-20 md:py-28">
-      <div className="mx-auto max-w-7xl px-6">
-        <div className="mb-12 text-center">
-          <h2 className="font-display text-3xl font-bold sm:text-4xl">Hvad vores brugere siger</h2>
-          <p className="mt-3 text-muted-foreground">Rigtige organisationer — rigtige resultater.</p>
-        </div>
-
-        <div ref={ref} className="grid gap-6 md:grid-cols-3">
-          {TESTIMONIALS.map((t, i) => (
-            <div
-              key={i}
-              className={`glass rounded-2xl p-6 transition-all duration-700 hover:-translate-y-1 hover:shadow-glow ${
-                inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-              }`}
-              style={{ transitionDelay: `${i * 120}ms` }}
-            >
-              <div className="mb-4 flex gap-0.5">
-                {Array.from({ length: t.stars }).map((_, j) => (
-                  <Star key={j} className="h-4 w-4 fill-primary text-primary" />
-                ))}
-              </div>
-              <blockquote className="mb-5 text-sm leading-relaxed text-foreground/90">
-                "{t.quote}"
-              </blockquote>
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-primary text-xs font-bold text-primary-foreground">
-                  {t.name[1] ?? "?"}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.title}, {t.org}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-12 text-center">
-          <CtaButton tracking="social-proof" />
-          <p className="mt-3 text-xs text-muted-foreground">Ingen kreditkort. Ingen binding.</p>
-        </div>
-      </div>
-    </section>
-  );
-}
+// Testimonials replaced by BetaSignupSection above — add real quotes here when collected
 
 // ─── Pricing teaser ───────────────────────────────────────────────────────────
 
@@ -1109,11 +1216,10 @@ function Forside() {
         <Nav />
         <main>
           <Hero />
-          <SocialProofBar />
+          <BetaSignupSection />
           <PainSolution />
           <BrancheTabs />
           <StatsBar />
-          <Testimonials />
           <PricingTeaser />
           <SecuritySection />
           <FaqSection />
