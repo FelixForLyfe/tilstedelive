@@ -5,28 +5,20 @@ import { useOrg } from "./OrgContext";
 export type CheckinMethod = "none" | "qr" | "pin" | "both";
 
 export type FeatureFlags = {
-  aktiviteter: boolean;
   status: boolean;
-  arbejdstidslog: boolean;
-  hjemsendelser: boolean;
-  opgaver: boolean;
+  aktiviteter: boolean;
+  arbejdstidslog: boolean; // controls Tjek ind visibility
   vagtplan: boolean;
-  gulvoversigt: boolean;
-  anonym_feedback: boolean;
   checkin_method: CheckinMethod;
   auto_close_day: boolean;
   auto_close_time: string; // "HH:MM:SS" from PostgreSQL TIME
 };
 
 const DEFAULT_FLAGS: FeatureFlags = {
-  aktiviteter: true,
   status: true,
-  arbejdstidslog: true,
-  hjemsendelser: true,
-  opgaver: false,
+  aktiviteter: true,
+  arbejdstidslog: false,
   vagtplan: false,
-  gulvoversigt: false,
-  anonym_feedback: false,
   checkin_method: "none",
   auto_close_day: false,
   auto_close_time: "22:00:00",
@@ -62,14 +54,10 @@ export function FeatureFlagsProvider({ children }: { children: ReactNode }) {
     setFlags(
       data
         ? {
-            aktiviteter: data.aktiviteter,
             status: data.status,
+            aktiviteter: data.aktiviteter,
             arbejdstidslog: data.arbejdstidslog,
-            hjemsendelser: data.hjemsendelser,
-            opgaver: data.opgaver,
             vagtplan: data.vagtplan,
-            gulvoversigt: data.gulvoversigt,
-            anonym_feedback: data.anonym_feedback,
             checkin_method: data.checkin_method as CheckinMethod,
             auto_close_day: data.auto_close_day ?? false,
             auto_close_time: data.auto_close_time ?? "22:00:00",

@@ -149,8 +149,8 @@ function AppLayout() {
   const navItems = [
     ...(flags.status ? [{ to: "/app", label: "Status", icon: Home, exact: true }] : []),
     ...(flags.aktiviteter ? [{ to: "/app/aktiviteter", label: "Aktiviteter", icon: Activity }] : []),
-    ...(flags.arbejdstidslog ? [{ to: "/app/logning", label: "Logning", icon: Clock }] : []),
-    ...(flags.checkin_method !== "none" ? [{ to: "/checkin", label: "Tjek ind", icon: QrCode }] : []),
+    { to: "/app/logning", label: "Logning", icon: Clock },
+    ...(flags.arbejdstidslog && flags.checkin_method !== "none" ? [{ to: "/checkin", label: "Tjek ind", icon: QrCode }] : []),
     ...(erAdmin ? [
       { to: "/app/arkiv", label: "Arkiv", icon: Archive },
       { to: "/app/admin", label: "Admin", icon: ShieldCheck },

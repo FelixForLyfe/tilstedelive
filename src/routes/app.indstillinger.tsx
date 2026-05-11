@@ -29,13 +29,9 @@ type FeatureToggle = {
 
 const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "status", label: "Status", description: "Fremmøde- og statusoversigt for deltagere." },
-  { key: "aktiviteter", label: "Aktiviteter", description: "Planlæg og log aktiviteter." },
-  { key: "arbejdstidslog", label: "Arbejdstidslog", description: "Registrér arbejdstid for personale." },
-  { key: "hjemsendelser", label: "Hjemsendelser", description: "Administrér tidlig hjemtagning." },
-  { key: "opgaver", label: "Opgaver", description: "Opgavefordeling og -styring.", comingSoon: true },
+  { key: "aktiviteter", label: "Aktiviteter", description: "Planlæg og log aktiviteter og opgaver." },
+  { key: "arbejdstidslog", label: "Tjek ind", description: "Giver personale mulighed for at tjekke ind og ud via QR-kode eller PIN." },
   { key: "vagtplan", label: "Vagtplan", description: "Digital vagtplan for personalet.", comingSoon: true },
-  { key: "gulvoversigt", label: "Gulvoversigt", description: "Real-time overblik over lokaler.", comingSoon: true },
-  { key: "anonym_feedback", label: "Anonym feedback", description: "Anonyme tilbagemeldinger fra personale.", comingSoon: true },
 ];
 
 const CHECKIN_METHODS: { value: CheckinMethod; label: string; icon: any; description: string }[] = [
