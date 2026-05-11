@@ -7,6 +7,9 @@ import {
   Key,
   FileText,
   AlertTriangle,
+  Star,
+  ThumbsUp,
+  ThumbsDown,
   RefreshCw,
   Search,
   X,
@@ -57,6 +60,11 @@ import {
   type MonthlyCost,
   type CustomPlan,
 } from "@/server/superadmin.functions";
+import {
+  superadminListReviews,
+  superadminApproveReview,
+  superadminDeleteReview,
+} from "@/server/reviews.functions";
 import { ORG_TYPE_LABELS } from "@/lib/terminology";
 import { toast } from "sonner";
 
@@ -200,6 +208,7 @@ const TABS = [
   { id: "users", label: "Brugere", icon: Users },
   { id: "keys", label: "Plan-nøgler", icon: Key },
   { id: "misc", label: "Misc. Planer", icon: Layers },
+  { id: "reviews", label: "Anmeldelser", icon: Star },
   { id: "log", label: "Handlingslog", icon: FileText },
 ] as const;
 
@@ -321,6 +330,7 @@ function SuperadminPanel() {
         {activeTab === "users" && <UsersTab accessToken={accessToken} />}
         {activeTab === "keys" && <KeysTab accessToken={accessToken} />}
         {activeTab === "misc" && <MiscPlansTab accessToken={accessToken} />}
+        {activeTab === "reviews" && <AnmeldelserTab accessToken={accessToken} />}
         {activeTab === "log" && <LogTab accessToken={accessToken} />}
       </div>
 
@@ -2026,6 +2036,177 @@ function CustomPlanModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Anmeldelser tab ──────────────────────────────────────────────────────────
+
+const ORG_TYPE_REVIEW_LABELS: Record<string, string> = {
+  sfo: "SFO / Fritidsklub",
+  sportsklub: "Sportsklub",
+  butik: "Butik",
+  andet: "Andet",
+};
+
+function AnmeldelserTab({ accessToken }: { accessToken: string }) {
+  type Review = { id: string; stars: number; name: string | null; org_type: string | null; review_text: string | null; gdpr_consent: boolean; approved: boolean; created_at: string };
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await superadminListReviews({ data: { accessToken } });
+      setReviews(data as Review[]);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [accessToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const approve = async (id: string) => {
+    setWorking(id);
+    try {
+      await superadminApproveReview({ data: { accessToken, reviewId: id } });
+      setReviews((prev) => prev.map((r) => r.id === id ? { ...r, approved: true } : r));
+    } catch (err: any) { alert(err?.message ?? "Fejl"); }
+    finally { setWorking(null); }
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("Slet denne anmeldelse permanent?")) return;
+    setWorking(id);
+    try {
+      await superadminDeleteReview({ data: { accessToken, reviewId: id } });
+      setReviews((prev) => prev.filter((r) => r.id !== id));
+    } catch (err: any) { alert(err?.message ?? "Fejl"); }
+    finally { setWorking(null); }
+  };
+
+  const pending = reviews.filter((r) => !r.approved);
+  const approved = reviews.filter((r) => r.approved);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold">Anmeldelser</h2>
+          <p className="text-sm text-muted-foreground">
+            {pending.length} afventer godkendelse · {approved.length} publiceret
+          </p>
+        </div>
+        <button onClick={load} className="rounded-xl border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-elevated">
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-center text-sm text-muted-foreground py-12">Indlæser…</div>
+      ) : (
+        <>
+          {pending.length > 0 && (
+            <section>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Afventer godkendelse ({pending.length})</h3>
+              <div className="space-y-3">
+                {pending.map((r) => (
+                  <div key={r.id} className="glass rounded-2xl p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map((s) => (
+                              <Star key={s} className={`h-4 w-4 ${s <= r.stars ? "text-warning fill-warning" : "text-muted"}`} />
+                            ))}
+                          </div>
+                          <span className="text-sm font-semibold">{r.name || "Anonym"}</span>
+                          {r.org_type && (
+                            <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted-foreground">
+                              {ORG_TYPE_REVIEW_LABELS[r.org_type] ?? r.org_type}
+                            </span>
+                          )}
+                        </div>
+                        {r.review_text && <p className="text-sm text-muted-foreground leading-relaxed">{r.review_text}</p>}
+                        <p className="mt-2 text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => approve(r.id)}
+                          disabled={working === r.id}
+                          className="flex items-center gap-1.5 rounded-xl bg-success/15 px-3 py-2 text-xs font-semibold text-success hover:bg-success/25 disabled:opacity-50"
+                        >
+                          <ThumbsUp className="h-3.5 w-3.5" /> Godkend
+                        </button>
+                        <button
+                          onClick={() => remove(r.id)}
+                          disabled={working === r.id}
+                          className="flex items-center gap-1.5 rounded-xl bg-destructive/15 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/25 disabled:opacity-50"
+                        >
+                          <ThumbsDown className="h-3.5 w-3.5" /> Afvis
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {approved.length > 0 && (
+            <section>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Publiceret ({approved.length})</h3>
+              <div className="glass overflow-hidden rounded-2xl">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="px-4 py-3">Stjerner</th>
+                      <th className="px-4 py-3">Navn</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Anmeldelse</th>
+                      <th className="px-4 py-3">Dato</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {approved.map((r) => (
+                      <tr key={r.id} className="hover:bg-surface/50">
+                        <td className="px-4 py-3">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map((s) => (
+                              <Star key={s} className={`h-3.5 w-3.5 ${s <= r.stars ? "text-warning fill-warning" : "text-muted"}`} />
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-medium">{r.name || "Anonym"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{r.org_type ? (ORG_TYPE_REVIEW_LABELS[r.org_type] ?? r.org_type) : "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{r.review_text || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("da-DK")}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => remove(r.id)}
+                            disabled={working === r.id}
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/15 hover:text-destructive disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {reviews.length === 0 && (
+            <div className="py-16 text-center text-muted-foreground">
+              <Star className="mx-auto mb-3 h-8 w-8 opacity-30" />
+              <p className="text-sm">Ingen anmeldelser endnu</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
