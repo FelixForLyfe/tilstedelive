@@ -847,7 +847,13 @@ function FeatureSection({
             </div>
           </div>
           {/* Graphic */}
-          <div className="flex justify-center">{graphic}</div>
+          <div className="flex flex-col items-center gap-3">
+            {graphic}
+            <p className="text-xs text-muted-foreground/60 text-center">
+              Demo-grafik — den rigtige funktion er endnu bedre.{" "}
+              <Link to="/signup" search={{ plan: undefined }} className="text-primary hover:underline" onClick={() => trackCta(`feature-caption-${tag}`)}>Prøv gratis →</Link>
+            </p>
+          </div>
         </div>
       </div>
     </section>
