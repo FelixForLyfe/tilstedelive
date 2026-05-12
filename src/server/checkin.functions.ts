@@ -296,6 +296,84 @@ export const pinCheckin = createServerFn({ method: "POST" })
     return { action: "checkin" as const, locationName: location.location_name as string };
   });
 
+// ── Direct button check-in (no PIN or QR required) ────────────────────────────
+
+export const directCheckin = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        accessToken: z.string().min(1),
+        orgId: z.string().uuid(),
+        action: z.enum(["start_vagt", "start_pause", "slut_pause", "slut_vagt"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const userId = await verifyToken(data.accessToken);
+
+    const { data: membership } = await supabaseAdmin
+      .from("organization_members")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("organization_id", data.orgId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!membership) throw new Error("Du er ikke tilknyttet denne organisation.");
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { data: openCheckin } = await (supabaseAdmin as any)
+      .from("staff_checkins")
+      .select("id, checked_in_at, on_break_since")
+      .eq("user_id", userId)
+      .eq("organization_id", data.orgId)
+      .is("checked_out_at", null)
+      .gte("checked_in_at", today.toISOString())
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+
+    if (data.action === "start_vagt") {
+      if (openCheckin) throw new Error("Du er allerede tjekket ind.");
+      await (supabaseAdmin as any).from("staff_checkins").insert({
+        organization_id: data.orgId,
+        user_id: userId,
+        location_id: null,
+        checkin_type: "button",
+      });
+      return { action: "start_vagt" as const };
+    }
+
+    if (!openCheckin) throw new Error("Du er ikke tjekket ind.");
+
+    if (data.action === "start_pause") {
+      if (openCheckin.on_break_since) throw new Error("Du er allerede på pause.");
+      await (supabaseAdmin as any)
+        .from("staff_checkins")
+        .update({ on_break_since: now })
+        .eq("id", openCheckin.id);
+      return { action: "start_pause" as const };
+    }
+
+    if (data.action === "slut_pause") {
+      if (!openCheckin.on_break_since) throw new Error("Du er ikke på pause.");
+      await (supabaseAdmin as any)
+        .from("staff_checkins")
+        .update({ on_break_since: null })
+        .eq("id", openCheckin.id);
+      return { action: "slut_pause" as const };
+    }
+
+    // slut_vagt
+    await (supabaseAdmin as any)
+      .from("staff_checkins")
+      .update({ checked_out_at: now, on_break_since: null })
+      .eq("id", openCheckin.id);
+    return { action: "slut_vagt" as const };
+  });
+
 export type QrLocation = {
   id: string;
   code: string;

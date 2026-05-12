@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "./OrgContext";
 
-export type CheckinMethod = "none" | "qr" | "pin" | "both";
+export type CheckinMethod = "none" | "qr" | "pin" | "both" | "button";
 
 export type FeatureFlags = {
   status: boolean;

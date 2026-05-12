@@ -12,7 +12,6 @@ export const Route = createFileRoute("/login/personale")({
 
 function TeamLogin() {
   const navigate = useNavigate();
-  const [orgNavn, setOrgNavn] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,29 +27,19 @@ function TeamLogin() {
       return;
     }
 
+    // Auto-select org if the user belongs to exactly one
     const { data: medlemskaber } = await supabase
       .from("organization_members")
-      .select("organization_id, role, status, organizations(id, name)")
+      .select("organization_id")
       .eq("user_id", signIn.user.id)
       .eq("status", "active");
 
-    const match = (medlemskaber ?? []).find(
-      (m: any) => m.organizations?.name?.trim().toLowerCase() === orgNavn.trim().toLowerCase()
-    );
-
-    if (!match) {
-      await supabase.auth.signOut();
-      setLoading(false);
-      toast.error("Ingen adgang", {
-        description: "Du er ikke tilknyttet denne organisation. Bed din administrator om en invitations-kode.",
-      });
-      return;
+    if (medlemskaber?.length === 1) {
+      localStorage.setItem("tilstede.aktivOrgId", medlemskaber[0].organization_id);
     }
 
-    localStorage.setItem("tilstede.aktivOrgId", match.organization_id);
     setLoading(false);
     trackEvent("login_success", { method: "personale" });
-    toast.success(`Velkommen til ${(match as any).organizations?.name}`);
     navigate({ to: "/app" });
   };
 
@@ -66,24 +55,14 @@ function TeamLogin() {
 
         <div className="glass rounded-3xl p-8 shadow-card">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent">
-            <Users className="h-3.5 w-3.5" /> Log ind
+            <Users className="h-3.5 w-3.5" /> Personale
           </div>
           <h1 className="font-display text-2xl font-bold">Log ind</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Skriv organisationens navn og log ind med din konto.
+            Log ind med din e-mail og adgangskode.
           </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
-            <div>
-              <label className="text-sm font-medium">Organisationens navn</label>
-              <input
-                required
-                value={orgNavn}
-                onChange={(e) => setOrgNavn(e.target.value)}
-                placeholder="Fx Greve FC eller Solsikkens SFO"
-                className="mt-1 w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:border-ring focus:outline-none"
-              />
-            </div>
             <div>
               <label className="text-sm font-medium">E-mail</label>
               <input
@@ -116,7 +95,7 @@ function TeamLogin() {
             <p>
               Ny bruger?{" "}
               <Link to="/signup/personale" className="font-semibold text-primary hover:underline">
-                Opret konto med invitations-kode
+                Opret konto
               </Link>
             </p>
             <p>

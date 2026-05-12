@@ -41,6 +41,7 @@ const CHECKIN_METHODS: { value: CheckinMethod; label: string; icon: any; descrip
   { value: "qr", label: "QR-kode", icon: QrCode, description: "Personale scanner en QR-kode." },
   { value: "pin", label: "PIN-kode", icon: KeySquare, description: "Personale indtaster en PIN-kode." },
   { value: "both", label: "Begge", icon: null, description: "Både QR og PIN er tilgængelige." },
+  { value: "button", label: "Knapper", icon: null, description: "Start Vagt / Pause / Slut Vagt – ingen kode krævet." },
 ];
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
